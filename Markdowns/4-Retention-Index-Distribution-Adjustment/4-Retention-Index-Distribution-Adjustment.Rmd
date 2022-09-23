@@ -1,0 +1,968 @@
+---
+title: "Retention Index Distribution Probability Adjustment"
+author: "Degnan, David J. & Bramer, Lisa M. & Flores, Javier E."
+date: "Last updated: 09/23/2022"
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+    lib_dir: trelli
+---
+
+```{r Setup, include=FALSE}
+path <- "~/Git_Repos/metabolomics_scoring_metrics/Retention_Index/Markdowns/4-Retention-Index-Distribution-Adjustment-Rank/"
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(rootdir = path)
+#setwd(path)
+library(dplyr); library(data.table); library(ggplot2); library(patchwork)
+library(tidyr); library(purrr); library(MASS); library(e1071)
+```
+
+```{r Load Data}
+# Read in the verified and cleaned annotation data
+CoreMS_Files <- list.files("~/Git_Repos/metabolomics_scoring_metrics/Data/CoreMS_Identification/", full.names = T)
+
+# Pull all true positives 
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+
+# Subset to N > 30
+MetaboliteCount <- table(Annotations$`Compound Name`, dnn = c("Compound.Name")) %>%
+  data.frame() 
+Anno30 <- Annotations[Annotations$`Compound Name` %in% 
+                      MetaboliteCount[MetaboliteCount$Freq >= 30, "Compound.Name"],] %>%
+  filter(`Compound Name` != "[PNNLMET0040] Impurity 001 [12.148]")
+Compounds <- unique(Anno30$`Compound Name`)
+```
+
+# Fitting Distributions
+
+The next step is to fit $RI_{Q}$ to statistical distributions,
+and see if using the other distributions improves the scores. The selected alternative
+distributions are Logistic, Log Normal, and Gamma. The MASS package
+in R was used with the mean least squares parameter estimation algorithm. Each score
+is calculated as 2$*$lower tail (if below the median) or 2$*$upper tail (if above
+the median).
+
+```{r}
+# Define a function to clean metabolite names 
+cleanNames <- function(x) {
+  cleaned <- gsub("\\[[^\\]]*\\]", "", x, perl=TRUE) %>% 
+    gsub(pattern = "^\\s+|\\s+$", replacement = "") 
+  if (cleaned %in% c("D-fructose", "D-glucose", "L-glutamine", "L-tyrosine")) {
+    if (x == "D-fructose [major]") {return("D-fructose major")} else
+    if (x == "D-fructose [minor]") {return("D-fructose minor")} else
+    if (x == "D-glucose [major]") {return("D-glucose major")} else
+    if (x == "D-glucose [minor]") {return("D-glucose minor")} else
+    if (x == "L-glutamine [major]") {return("L-glutamine major")} else 
+    if (x == "L-glutamine [minor 2]") {return("L-glutamine minor 2")} else
+    if (x == "L-tyrosine [major]") {return("L-tyrosine major")} else
+    if (x == "L-tyrosine [minor]") {return("L-tyrosine minor")}
+  } else {return(cleaned)}
+}
+
+set.seed(450)
+
+# Calculate gamma fits with fitdistrPlus, which fails on normal, log normal, and logistic
+param_fit <- lapply(Compounds, function(cmpd) {
+  
+  # Get retention index differences for continuous distributions
+  distr <- (Anno30[Anno30$`Compound Name` == cmpd, "Retention Index"]) %>% unlist()
+  
+  # Return a list of fitted parameters 
+  suppressWarnings({list(
+    "Normal" = tryCatch({fitdistr(distr, "normal")}, error = function(e) {return(NA)}),
+    "Log Normal" = tryCatch({fitdistr(distr, "lognormal")}, error = function(e) {return(NA)}),
+    "Logistic" = tryCatch({fitdistr(distr, "logistic")}, error = function(e) {return(NA)}),
+    "Gamma" = tryCatch({fitdistr(distr, "gamma")}, error = function(e) {return(NA)}),
+    "Original" = Anno30[Anno30$`Compound Name` == cmpd, "Retention Index Ref"] %>% unlist() %>% head(1),
+    "Distribution" = distr
+  )})
+  
+})
+names(param_fit) <- lapply(Compounds, cleanNames) %>% unlist()
+```
+
+## Parameter Fits 
+
+The next step is to capture the amount of variation in parameter fitting $RI_Q$ 
+to each distribution. 
+
+```{r}
+# Calculate Global Stats
+GlobalStats <- Anno30 %>%
+  group_by(`Compound Name`) %>%
+  summarise(
+    Mean = mean(`Retention Index`),
+    Var = var(`Retention Index`)
+  )
+colnames(GlobalStats)[1] <- "Compound"
+
+# Pull standard deviations of parameter estimates 
+pull_fit_stat <- function(stat_name) {
+  
+  do.call(rbind, lapply(param_fit, function(x) {
+    
+    if (is.na(x$Normal[1])) {NormMean <- NA; NormSD <- NA} else {
+      NormMean <- x$Normal[[stat_name]][["mean"]]
+      NormSD <- x$Normal[[stat_name]][["sd"]]
+    }
+    
+    if (is.na(x$`Log Normal`[1])) {LNormMean <- NA; LNormSD <- NA} else {
+      LNormMean <- x$`Log Normal`[[stat_name]][["meanlog"]]
+      LNormSD <- x$`Log Normal`[[stat_name]][["sdlog"]]
+    }
+    
+    if (is.na(x$Logistic[1])) {LogisLoc <- NA; LogisScale <- NA} else {
+      LogisLoc <- x$Logistic[[stat_name]][["location"]]
+      LogisScale <- x$Logistic[[stat_name]][["scale"]]
+    }
+    
+    if (is.na(x$Gamma[1])) {GammaShape <- NA; GammaRate <- NA} else {
+      GammaShape <- x$Gamma[[stat_name]][["shape"]]
+      GammaRate <- x$Gamma[[stat_name]][["rate"]]
+    }
+    
+    return(c("Normal Mean" = NormMean, "Normal SD" = NormSD, 
+             "Log Normal Mean" = LNormMean, "Log Normal SD" = LNormSD, 
+             "Logistic Location" = LogisLoc, "Logistic Scale" = LogisScale,
+             "Gamma Shape" = GammaShape, "Gamma Rate" = GammaRate))
+  
+  })) %>% data.table()
+  
+}
+
+# Pull estimates
+param_estimates <- pull_fit_stat("estimate")
+param_sds <- pull_fit_stat("sd")
+
+# Generate a dataframe of estimates in long format 
+ParamFit <- param_estimates %>%
+  mutate(Compound = Compounds) %>%
+  pivot_longer(colnames(param_estimates)) %>%
+  rename(Metric = name, Estimate = value) %>%
+  merge(
+    param_sds %>%
+      mutate(Compound = Compounds) %>%
+      pivot_longer(colnames(param_sds)) %>%
+      rename(Metric = name, SD = value),
+    by = c("Compound", "Metric")
+  ) %>%
+  mutate(Poor = is.nan(`SD`),
+         Metric = factor(Metric, levels = colnames(param_estimates)))
+
+# Add the original score
+ParamFit <- Anno30 %>% 
+  dplyr::select(`Compound Name`, `Retention Index Ref`) %>% 
+  unique() %>%
+  rename(Compound = `Compound Name`, Estimate = `Retention Index Ref`) %>% 
+  mutate(SD = NaN, Poor = NA, Metric = "Original Reference") %>%
+  bind_rows(ParamFit)
+
+# Make a param plot
+param_plot <- function(theMetric, order_by = "mean", xlab = FALSE, ylab = FALSE) {
+  
+  toPlot <- ParamFit %>% 
+    filter(Metric == theMetric) %>%
+    merge(GlobalStats, by = "Compound")
+  
+  
+  if (order_by == "mean") {
+    toPlot <- toPlot %>%
+      arrange(Mean) %>%
+      mutate(Compound = 1:87)
+  } else {
+    toPlot <- toPlot %>%
+      arrange(Var) %>%
+      mutate(Compound = 1:87)
+  }
+  
+  if (grepl("Gamma", theMetric)) {
+    toPlot$Estimate <- log10(toPlot$Estimate)
+    toPlot$SD <- log10(toPlot$SD)
+  }
+  
+  if (order_by == "mean") {
+    toPlot <- toPlot %>% arrange(Mean)
+  } else if (order_by == "var") {
+    toPlot <- toPlot %>% arrange(Var)
+  }
+  
+  thePlot <- ggplot(toPlot, aes(x = Compound, y = Estimate, color = Poor)) + geom_point() + theme_bw() +
+    scale_color_manual(values = list("TRUE" = "red", "FALSE" = "black")) +
+    geom_segment(aes(x = Compound, y = Estimate - `SD`, 
+                     xend = Compound, yend = Estimate + `SD`)) +
+    ylab("Estimate +/- 1 SE") + ggtitle(theMetric) 
+  
+  if (grepl("Gamma", theMetric)) {
+    thePlot <- thePlot + ylab("Log10(Estimate) +/- 1 Log10(SE)")
+  }
+  
+  if (!xlab) {
+    thePlot <- thePlot + xlab("")
+  }
+  
+  if (!ylab) {
+    thePlot <- thePlot + ylab("")
+  }
+  
+  thePlot <- thePlot + theme(
+    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+    legend.position = "none", axis.title.y = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5)) 
+  
+  return(thePlot)
+  
+}
+
+Sup1 <- (param_plot("Gamma Rate", ylab = TRUE) | param_plot("Gamma Shape", "var")) /
+  (param_plot("Log Normal Mean", ylab = TRUE) | param_plot("Log Normal SD", "var")) /
+  (param_plot("Logistic Location", ylab = TRUE) | param_plot("Logistic Scale", "var")) /
+  (param_plot("Normal Mean", xlab = TRUE, ylab = TRUE) | param_plot("Normal SD", "var", xlab = TRUE)) 
+Sup1
+```
+
+**Figure 1: Maximum likelihood parameter estimates for each of the four test distributions (top row: gamma, second row: log normal, third row: logistic, last row: normal), where the point indicates the estimation and the lines indicated +/- 1 standard error, with the exception of gamma which has both of these values log transformed. Red is indicative of a point where the standard error of the estimate failed to calculate.**
+
+Parameter estimations for normal, log normal, and logistic are reasonable, with 
+relatively small standard deviations of the estimate (**Fig. 1**). Gamma 
+distribution estimates have high or NA standard deviations of their estimates,
+which is indicative of a poor fit. 
+
+## Kolmogorov-Smirnov Statistic
+
+The Komologorov-Smirnov (KS) test indicates how close the cumulative density
+functions of two distributions (in this case, the actual $RI_Q$ and its estimated
+distribution) by taking the maximum distance between the two curves. 
+
+```{r}
+# First, get the actual statistic values 
+suppressWarnings({KS_Stat <- do.call(rbind, lapply(param_fit, function(x) {
+  
+  runTest <- ks.test(unique(x$Distribution), rnorm(10000, mean = x$Original, sd = 3))
+  OrigStat <- runTest$statistic; OrigPVal <- runTest$p.value
+  
+  if (is.na(x$Normal[1])) {NormStat <- NormPVal <- NA} else {
+    runTest <- ks.test(unique(x$Distribution), rnorm(10000, 
+      mean = x$Normal$estimate[["mean"]], sd = x$Normal[["sd"]]))
+    NormStat <- runTest$statistic; NormPVal <- runTest$p.value
+  }
+  
+  if (is.na(x$`Log Normal`[1])) {LNormStat <- LNormPVal <- NA} else {
+    runTest <- ks.test(unique(x$Distribution), rlnorm(10000, 
+      meanlog = x$`Log Normal`$estimate[["meanlog"]], 
+      sdlog = x$`Log Normal`$estimate[["sdlog"]]))
+    LNormStat <- runTest$statistic; LNormPVal <- runTest$p.value
+  }
+  
+  if (is.na(x$Logistic[1])) {LogisStat <- LogisPVal <- NA} else {
+    runTest <- ks.test(unique(x$Distribution), rlogis(10000, 
+      location = x$Logistic$estimate[["location"]], 
+      scale = x$Logistic$estimate[["scale"]]))
+    LogisStat <- runTest$statistic; LogisPVal <- runTest$p.value
+  }
+  
+  if (is.na(x$Gamma[1])) {GammaStat <- GammaPVal <- NA} else {
+    runTest <- ks.test(unique(x$Distribution), rgamma(10000,  
+      shape = x$Gamma$estimate[["shape"]],
+      rate = x$Gamma$estimate[["rate"]]))
+    GammaStat <- runTest$statistic; GammaPVal <- runTest$p.value
+  }
+  
+  return(c("Original Stat" = OrigStat, "Original PVal" = OrigPVal,
+           "Normal Stat" = NormStat, "Normal PVal" = NormPVal,
+           "Log Normal Stat" = LNormStat, "Log Normal PVal" = LNormPVal,
+           "Logistic Stat" = LogisStat, "Logistic PVal" = LogisPVal,
+           "Gamma Stat" = GammaStat, "Gamma PVal" = GammaPVal))
+  
+})) %>% data.table()})
+
+# Rename categories and add compound names 
+colnames(KS_Stat)[c(1,3,5,7,9)] <- c("Original Stat", "Normal Stat", "Log Normal Stat", "Logistic Stat", "Gamma Stat")
+KS_Stat$Compound <- lapply(Compounds, cleanNames) %>% unlist()
+
+# Pivot longer and determine the best KS Stat 
+KS_Stat_Best <- merge(
+  KS_Stat %>%
+    dplyr::select(Compound,`Original Stat`, `Normal Stat`, `Log Normal Stat`, `Logistic Stat`, `Gamma Stat`) %>%
+    pivot_longer(c(`Original Stat`, `Normal Stat`, `Log Normal Stat`, `Logistic Stat`, `Gamma Stat`)) %>%
+    rename(Distribution = name, Stat = value) %>%
+    mutate(Distribution = gsub(" Stat", "", Distribution)),
+  KS_Stat %>%
+    dplyr::select(Compound, `Original PVal`, `Normal PVal`, `Log Normal PVal`, `Logistic PVal`, `Gamma PVal`) %>%
+    pivot_longer(c(`Original PVal`, `Normal PVal`, `Log Normal PVal`, `Logistic PVal`, `Gamma PVal`)) %>%
+    rename(Distribution = name, `P Value` = value) %>%
+    mutate(Distribution = gsub(" PVal", "", Distribution)),
+  by = c("Compound", "Distribution")
+) %>%
+  rename(Metabolite = Compound) %>%
+  group_by(Metabolite) %>%
+  mutate(
+    Performance = ifelse(Stat == min(Stat, na.rm = T), "Best", 
+                  ifelse(abs(`P Value` - `P Value`[which.min(Stat)]) <= 0.05, "Within 0.05", NA))
+  ) %>% 
+  rename(`KS Statistic` = Stat)
+
+# Make plot  
+KSStatPlot <- KS_Stat_Best %>%
+  ggplot(aes(x = Distribution, y = Metabolite, fill = `KS Statistic`)) + geom_tile() +
+  scale_fill_gradient2(low = scales::muted("blue"), high = scales::muted("red"), 
+                       midpoint = 0.5, mid = "#ffcccb") + 
+  geom_point(aes(shape = Performance), color = "black", na.rm = TRUE) + 
+  scale_shape_manual(values = structure(c(16, 4), .Names = c("Best", "Within 0.05")), na.value = NA) +
+  theme_bw() +   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  guides(fill = guide_legend(order = 1), 
+         shape = guide_legend(order = 2))
+
+KSStatPlot
+```
+
+**Figure 2: The Kolmogorov-Smirnov (KS) statistic of the distance between the query retention index $RI_Q$ distribution and a modeled distri-bution using maximum likelihood estimation. The "best" label refers to a distribution with the lowest KS statistic, and the other refers to a distribution that has a p-value "within 0.05" of the best distribution.**
+
+The three non-normal distributions tend to have lower KS statistics than the normal
+distributions (**Fig. 2**), which may mean these distributions fit the true 
+retention index query distribution better than the normal distribution. There is 
+evidence to suggest that using the kernels for these distributions as an RI score
+may lead to more improved ranks than adjusting the normal distribution score. 
+
+```{r}
+KS_Stat_Best %>% 
+  ungroup() %>% 
+  dplyr::select(Distribution, Performance) %>% 
+  group_by(Distribution) %>%
+  summarise(Count = sum(Performance == "Best", na.rm = T)) %>%
+  arrange(-Count)
+```
+
+## Akaike Information Criterion
+
+The Akaike Information Criterion (AIC) estimates the prediction error and therefore
+the relative quality of the distributional fit. Lower AICs indicate better fits. 
+AICs were scaled to the minimum value in each row by subtracting all AICs by their
+minimum AIC value. 
+
+```{r}
+# Calculate AIC 
+suppressWarnings({AIC_Stat <- do.call(rbind, lapply(param_fit, function(x) {
+  
+  if (is.na(x$Normal[1])) {Norm <- NA} else {
+    Norm <- -2 * x$Normal$loglik + 2 * 2
+  }
+  
+  if (is.na(x$`Log Normal`[1])) {LNorm <- NA} else {
+    LNorm <- -2 * x$`Log Normal`$loglik + 2 * 2
+  }
+  
+  if (is.na(x$Logistic[1])) {Logis <- NA} else {
+    Logis <- -2 * x$Logistic$loglik + 2 * 2
+  }
+  
+  if (is.na(x$Gamma[1])) {Gamma <- NA} else {
+    Gamma <- -2 * x$Gamma$loglik + 2 * 2
+  }
+  
+  return(c("Normal" = Norm, "Log Normal" = LNorm, "Logistic" = Logis, "Gamma" = Gamma))
+  
+})) %>% data.table()})
+
+# Add compound names
+AIC_Stat$Compound <- lapply(Compounds, cleanNames) %>% unlist()
+
+# Calculated scaled AIC (AIC - min(AIC)) and collapse into bins 
+AIC_Format <- AIC_Stat %>%
+  pivot_longer(cols = c(Normal, `Log Normal`, Logistic, Gamma)) %>%
+  rename(Distribution = name, AIC = value, Metabolite = Compound) %>%
+  group_by(Metabolite) %>%
+  mutate(
+    `Scaled AIC` = AIC - min(AIC, na.rm = T),
+    `Scaled AIC Bin` = ifelse(`Scaled AIC` < 2, "[0,2]", 
+                       ifelse(`Scaled AIC` <= 10, "(2,10)", 
+                       ifelse(`Scaled AIC` < 100, "[10,100]", "(100,482.2]")))
+  )
+
+# Convert NA to a string
+AIC_Format$`Scaled AIC Bin`[is.na(AIC_Format$`Scaled AIC Bin`)] <- "NA"
+
+# Construct plot
+AICStatPlot <- AIC_Format %>%
+  mutate(
+    `Scaled AIC Bin` = factor(`Scaled AIC Bin`, levels = c("NA", "[0,2]", "(2,10)",
+                                                           "[10,100]", "(100,482.2]")),
+    Performance = ifelse(`Scaled AIC` == 0, "Best", NA),
+  ) %>%
+  ggplot(aes(x = Distribution, y = Metabolite, fill = `Scaled AIC Bin`)) + geom_tile() + 
+  scale_fill_manual(values = c("[0,2]" = "goldenrod1", "(2,10)" = "orange", 
+                                  "[10,100]" = "indianred1", "(100,482.2]" = "indianred3",
+                                  "NA" = "gray50")) +
+  geom_point(aes(color = Performance)) + 
+  theme_bw() +   theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
+  scale_color_manual(values = structure(c("black", NA), .Names = c("Best", "")), na.value = NA) +
+  theme(axis.text.y = element_text(size = 6))
+
+AICStatPlot
+```
+
+**Figure 3: The Akaike Information Criterion (AIC) statistic of the distance between the $RI_Q$ distribution and an estimate of that distribution using maximum likelihood estimation. AIC has been scaled to the minimum AIC per metabolite, and the binned as listed in the legend above where 0-2 exclusive is  Gray is indicative of a distribution that failed to calculate estimated parameters.**
+
+The AIC statistic also provides evidence to support that other distributions
+may fit $RI_Q$ better than the normal (**Fig. 3**). According to the AIC statistic,
+normal may be an appropriate estimation more often than is suggested by the 
+KS statistic. The most interesting find of the AIC statistic, is that logistic fit
+is rarely far removed from being the best fit. 
+
+# Rank Changes
+
+```{r}
+NormalHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Normal_Adj_Holdout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+NormalProbHoldout  <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Normal_Prob_Holdout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+GammaHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Gamma_Prob_Holdout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+LogisticHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Logistic_Prob_Holdout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+LogNormalHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/LogNormal_Prob_Holdout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+rankProp <- function(ranks, N) {
+  round(length(ranks[ranks <= N & !is.na(ranks)]) / length(ranks), 4)
+}
+
+get_ranks_data <- function(Dataset, Truth, N, Name) {
+  Res <- Dataset %>% 
+    filter(`Truth Annotation` == Truth) %>%
+    dplyr::select(`Compound Name`, `New RI Rank`) %>%
+    group_by(`Compound Name`) %>%
+    summarise(Variable = rankProp(`New RI Rank`, N))
+  colnames(Res)[2] <- Name
+  return(Res)
+}
+
+# Calculate the original ranks 
+OriginalValues <- NormalHoldout %>%
+  filter(`Truth Annotation` == "True.Positive") %>%
+  dplyr::select(`Compound Name`, `Retention Index Rank`) %>%
+  group_by(`Compound Name`) %>%
+  summarise(Original = rankProp(`Retention Index Rank`, 1))
+
+# Calculate the normal adjusted ranks 
+NormAdj <- get_ranks_data(NormalHoldout, "True.Positive", 1, "Original Adjusted")
+
+# Norm Prob
+NormProb <- get_ranks_data(NormalProbHoldout, "True.Positive", 1, "Normal")
+
+# Gamma 
+Gamma <- get_ranks_data(GammaHoldout, "True.Positive", 1, "Gamma")
+
+# Logistic
+Logistic <- get_ranks_data(LogisticHoldout, "True.Positive", 1, "Logistic")
+
+# Log Normal
+LogNormal <- get_ranks_data(LogNormalHoldout, "True.Positive", 1, "Log Normal")
+
+DataLevels <- c("Gamma", "Log Normal", "Logistic", "Normal", 
+         "Original Adjusted", "Original")
+
+# Combine data 
+Combined <- merge(OriginalValues, NormAdj, by = "Compound Name") %>%
+  merge(NormProb, by = "Compound Name") %>%
+  merge(Gamma, by = "Compound Name") %>%
+  merge(Logistic, by = "Compound Name") %>%
+  merge(LogNormal, by = "Compound Name") %>%
+  mutate(`Compound Name` = lapply(`Compound Name`, cleanNames) %>% unlist()) %>%
+  pivot_longer(all_of(DataLevels)) %>%
+  dplyr::rename(Proportion = value) %>%
+  mutate(
+    name = factor(name, levels = DataLevels)
+  ) 
+
+# Generate resulting heatmap 
+Rank1Plot <- ggplot(Combined, aes(x = name, y = `Compound Name`, fill = Proportion)) + geom_tile() +
+  ylab("Metabolite") + xlab("Scoring Method") + theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) +
+  scale_fill_gradient2(low = scales::muted("violet"), high = scales::muted("blue"), 
+                       midpoint = 0.25, mid =  "#ffcccb") +
+  theme(axis.text.y = element_text(size = 6)) 
+
+Rank1Plot
+```
+
+**Figure 4: The proportion of identifications at rank 1 for each scoring method. Gamma, Log Normal, Logistic, Normal Kernel (original RI score), and Normal Probability results are calculated with the 10% holdout analysis.**
+
+Overall, retention index scores that use values from each $RI_Q$ distribution 
+tend to perform better than the original score for our holdout analysis on the 
+full dataset for true positives at rank 1 (**Fig. 4**).
+
+```{r}
+countRanks <- function(ranks, N) {
+   length(ranks[ranks <= N & !is.na(ranks)])
+}
+
+# Define a function to return rank proportions in a long format for ease of plotting
+get_ranks_data2 <- function(Dataset, Truth, N, Name) {
+  
+  Res <- Dataset %>% 
+    filter(`Truth Annotation` == Truth) %>%
+    dplyr::select(`Compound Name`, `New RI Rank`) %>%
+    group_by(`Compound Name`) %>%
+    summarise(
+      Proportion = rankProp(`New RI Rank`, N),
+      Count = countRanks(`New RI Rank`, N),
+      Total = length(`New RI Rank`)
+    ) %>%
+    mutate(`Compound Name` = lapply(`Compound Name`, cleanNames) %>% unlist())
+  Res$Score <- Name
+  Res$Truth <- gsub(".", " ", Truth, fixed = T)
+  Res$Rank <- N
+  return(Res)
+}
+
+# Define a function to make a loop for those values 
+get_ranks_all <- function(Dataset, Name) {
+  do.call(rbind, lapply(c("True.Positive", "True.Negative"), function(theTruth) {
+    do.call(rbind, lapply(c(1, 5), function(theRank) {
+      get_ranks_data2(Dataset, theTruth, theRank, Name)
+    }))
+  }))
+}
+
+# Add a secondary function for the original rankings
+get_ranks_data_orig <- function(Dataset, Truth, N, Name) {
+  Res <- Dataset %>% 
+    filter(`Truth Annotation` == Truth) %>%
+    dplyr::select(`Compound Name`, `Retention Index Rank`) %>%
+    group_by(`Compound Name`) %>%
+    summarise(
+      Proportion = rankProp(`Retention Index Rank`, N),
+      Count = countRanks(`Retention Index Rank`, N),
+      Total = length(`Retention Index Rank`)
+    ) %>%
+    mutate(`Compound Name` = lapply(`Compound Name`, cleanNames) %>% unlist())
+  Res$Score <- Name
+  Res$Truth <- gsub(".", " ", Truth, fixed = T)
+  Res$Rank <- N
+  return(Res)
+}
+
+# Define a function to make a loop for those values 
+get_ranks_orig <- function(Dataset, Name) {
+  Res <- do.call(rbind, lapply(c("True.Positive", "True.Negative"), function(theTruth) {
+    do.call(rbind, lapply(c(1, 5), function(theRank) {
+      get_ranks_data_orig(Dataset, theTruth, theRank, Name)
+    }))
+  }))
+}
+
+# Merge all the results together 
+AllRanks <- rbind(
+  get_ranks_orig(NormalHoldout, "Original"),
+  get_ranks_all(NormalHoldout, "Original Adjusted"),
+  get_ranks_all(NormalProbHoldout, "Normal"),
+  get_ranks_all(GammaHoldout, "Gamma"),
+  get_ranks_all(LogisticHoldout, "Logistic"),
+  get_ranks_all(LogNormalHoldout, "Log Normal")
+) %>%
+  mutate(Score = factor(Score, levels = DataLevels))
+fwrite(AllRanks, "../../RI_Specific_Data/Ranks.txt", sep = "\t", quote = F)
+
+
+# Make supplemental figure 2
+gen_rank_plot <- function(theTruth, theRank, xlab = "", ylab = "",
+                          keepCompounds = FALSE, legend = FALSE) {
+  plot <- AllRanks %>% 
+    filter(Truth == theTruth & Rank == theRank) %>%
+    ggplot(aes(x = Score, y = `Compound Name`, fill = Proportion)) + geom_tile() +
+    ylab(ylab) + xlab(xlab) + theme_bw() + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) + 
+    scale_fill_gradient2(low = scales::muted("violet"), high = scales::muted("blue"), 
+                         midpoint = 0.25, mid =  "#ffcccb") + 
+    ggtitle(paste0(theTruth, ", Rank ", theRank)) +
+    theme(legend.title = element_text(size = 8), axis.text.y = element_text(size = 6)) +
+    guides(fill = guide_legend(order = 1), shape = guide_legend(order = 2))
+  if (keepCompounds == FALSE) {plot <- plot + theme(axis.text.y = element_blank())}
+  if (legend == FALSE) {plot <- plot + theme(legend.position = "none")}
+  return(plot)
+}
+
+gen_rank_plot("True Positive", 1, keepCompounds = T, ylab = "Metabolite") | 
+  gen_rank_plot("True Positive", 5) |
+  gen_rank_plot("True Negative", 1) | gen_rank_plot("True Negative", 5, legend = T)
+```
+
+**Figure 5: Proportions of true positives (left two) and true negatives (right two) at ranks 1 and 5 per metabolite, following the 10% holdout analysis with all input data.**
+
+We see that the other scores tend to outperform the original at ranks 1 and 5
+for both true positives and true negatives. 
+
+# Explaining Rank Trends
+
+```{r}
+SampleMetadata <- fread("~/Git_Repos/metabolomics_scoring_metrics/Data/Metadata/Sample_Metadata.csv")
+SampleMetadata$`Sample Type`[SampleMetadata$`Sample Type` == "Standard Mixture"] <- "Standard"
+
+get_ranks_variance <- function(Dataset, Truth, Name) {
+  Res <- Dataset %>% 
+    filter(`Truth Annotation` == Truth) %>%
+    dplyr::select(`Iteration`, `Compound Name`, `New RI Rank`, `Sample Name`) %>%
+    merge(SampleMetadata[,c(1:2)], by = "Sample Name") %>%
+    dplyr::select(-`Sample Name`) %>%
+    group_by(`Compound Name`, Iteration, `Sample Type`) %>%
+    summarise(`Standard Deviation` = sd(`New RI Rank`, na.rm = T)) %>%
+    ungroup() %>%
+    group_by(`Compound Name`, `Sample Type`) %>%
+    summarise(`Median Rank Standard Deviation` = median(`Standard Deviation`, na.rm = T)) %>%
+    mutate(`Compound Name` = lapply(`Compound Name`, cleanNames) %>% unlist())
+  Res$Score <- Name
+  Res$Truth <- gsub(".", " ", Truth, fixed = T)
+  return(Res)
+}
+
+Var_Data <- rbind(
+  get_ranks_variance(NormalHoldout, "True.Positive", "Original Adjusted"),
+  get_ranks_variance(NormalProbHoldout, "True.Positive", "Normal"),
+  get_ranks_variance(GammaHoldout, "True.Positive", "Gamma"),
+  get_ranks_variance(GammaHoldout, "True.Positive", "Logistic"),
+  get_ranks_variance(GammaHoldout, "True.Positive", "Log Normal"),
+  get_ranks_variance(NormalHoldout, "True.Negative", "Original Adjusted"),
+  get_ranks_variance(NormalProbHoldout, "True.Negative", "Normal"),
+  get_ranks_variance(GammaHoldout, "True.Negative", "Gamma"),
+  get_ranks_variance(GammaHoldout, "True.Negative", "Logistic"),
+  get_ranks_variance(GammaHoldout, "True.Negative", "Log Normal")
+) %>%
+  mutate(Truth = factor(Truth, levels = c("True Positive", "True Negative")))
+
+# Make a permanent sample coloring scheme
+SampleColorVector <- c("CSF" = "forestgreen", "Fungi" = "steelblue", "Plasma" = "red",
+                       "Soil Crust" = "brown", "Standard" = "gray30", "Urine" = "darkorange")
+
+rank_plot <- ggplot(Var_Data, aes(x = Score, y = `Median Rank Standard Deviation`, fill = `Sample Type`)) +
+  geom_boxplot() + scale_fill_manual(values = SampleColorVector) +
+  theme_bw() + facet_wrap(.~Truth) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1))
+
+
+rank_plot
+```
+
+**Figure 6: The median standard deviation of rank following our 10% holdout analysis that was run 50 times, for all metabolites in our subset (n = 87), broken down by sample type and separated by true positives and negatives.**
+
+Variation in rank performance may be due to sample type over the score used (**Fig. 6**).
+
+```{r}
+Ranks <- fread("../../RI_Specific_Data/Ranks.txt")
+
+TP_Rank5 <- Ranks %>% 
+  filter(Truth == "True Positive" & Rank == 5) %>% 
+  dplyr::select(`Compound Name`, Proportion, Score) %>% 
+  mutate(Score = ifelse(Score != "Original", "Other", "Original")) %>% 
+  group_by(`Compound Name`) %>% 
+  filter(Proportion == max(Proportion)) %>% 
+  filter(n() == 1)
+
+TN_Rank5 <- Ranks %>% 
+  filter(Truth == "True Negative" & Rank == 5) %>% 
+  dplyr::select(`Compound Name`, Proportion, Score) %>% 
+  mutate(Score = ifelse(Score != "Original", "Other", "Original")) %>% 
+  group_by(`Compound Name`) %>% 
+  filter(Proportion == max(Proportion)) %>% 
+  filter(n() == 1)
+
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+MetaboliteCount <- table(Annotations$`Compound Name`, dnn = c("Compound.Name")) %>%
+  data.frame() 
+Anno30 <- Annotations[Annotations$`Compound Name` %in% 
+                      MetaboliteCount[MetaboliteCount$Freq >= 30, "Compound.Name"],] %>%
+  filter(`Compound Name` != "[PNNLMET0040] Impurity 001 [12.148]")
+Compounds <- unique(Anno30$`Compound Name`) %>% lapply(cleanNames) %>% unlist()
+
+# Get the global mean and standard deviation
+Globals <- Anno30 %>%
+  dplyr::select(c(`Compound Name`, `Retention Index`, `Retention Index Ref`)) %>%
+  mutate(
+    RID = `Retention Index` - `Retention Index Ref`,
+    `Compound Name` = lapply(`Compound Name`, cleanNames) %>% unlist()
+  ) %>%
+  group_by(`Compound Name`) %>%
+  nest() %>%
+  mutate(
+    Mean = map(data, function(x) {mean(x$RID)}) %>% unlist(),
+    `Standard Deviation` = map(data, function(x) {sd(x$RID)}) %>% unlist(),
+    Skew = map(data, function(x) {e1071::skewness(x$RID)}) %>% unlist(),
+    N = map(data, function(x) {length(x$RID)}) %>% unlist(),
+  ) 
+
+
+rank_explain <- rbind(
+  TP_Rank5 %>% mutate(Score = paste("True Positive", Score)),
+  TN_Rank5 %>% mutate(Score = paste("True Negative", Score)),
+) %>%
+  mutate(Score = factor(Score, levels = c("True Positive Original", "True Positive Other",
+                                          "True Negative Original", "True Negative Other"))) %>%
+  merge(Globals, by = "Compound Name") %>%
+  dplyr::select(Mean, `Standard Deviation`, Skew, Score) %>%
+  pivot_longer(c(Mean, `Standard Deviation`, Skew)) %>%
+  mutate(name = factor(name, levels = c("Mean", "Standard Deviation", "Skew"))) %>%
+  ggplot(aes(x = Score, y = value, fill = Score)) + geom_boxplot(outlier.shape = NA) + theme_bw() + 
+  geom_jitter(width = 0.25, height = 0) +
+  ylab("") + theme(legend.position = "none") + ggtitle("Rank 5") +
+  theme(plot.title = element_text(hjust = 0.5), 
+        axis.text.x = element_text(angle = 40, vjust = 1, hjust = 1)) + 
+  facet_wrap(.~name, scales = "free_y") 
+
+rank_explain
+```
+
+**Figure 7: The distributional properties of the query retention indices for the best performing scores at rank 5, separated by the metabolites where the original score performed better  or any other score performed better for the mean and standard deviation. Ties were removed.**
+
+More extreme means and sd and less extreme skew perform better with other scores 
+than the original RI score (**Fig. 7**).
+
+```{r}
+numAtt <- 10000
+
+# Add reference values to parameters
+Parameters <- fread("../../RI_Specific_Data/Parameter_Estimates.csv") %>%
+  merge(Anno30 %>% dplyr::select(`Compound Name`, `Retention Index Ref`) %>% unique() %>%
+          rename(Compound = `Compound Name`), by = "Compound")
+
+dist_matches <- do.call(rbind, lapply(c("[444972] fumaric acid [10.94]", "L-valine [major]", 
+         "[PNNLMET0076] D-xylose 2[M] [15.125]", "lactic acid"), function(x) {
+  
+  RI_Data <- Anno30[Anno30$`Compound Name` == x, "Retention Index"] %>% unlist()
+  Fits <- Parameters[Parameters$Compound == x,]
+  data.table(
+    Metabolite = cleanNames(x),
+    Distribution = c(rep("Query", length(RI_Data)), 
+                     rep("Original", numAtt),
+                     rep("Original Adjusted & Normal", numAtt),
+                     rep("Gamma", numAtt), rep("Log Normal", numAtt), rep("Logistic", numAtt)),
+    Values = c(RI_Data, 
+               rnorm(numAtt, unlist(Fits$`Retention Index Ref`), 3),
+               rnorm(numAtt,  unlist(Fits$`Normal Mean`), unlist(Fits$`Normal SD`)),
+               rgamma(numAtt, unlist(Fits$`Gamma Shape`), unlist(Fits$`Gamma Rate`)),
+               rlogis(numAtt, unlist(Fits$`Logistic Location`), unlist(Fits$`Logistic Scale`)),
+               rlnorm(numAtt, unlist(Fits$`Log Normal Mean`), unlist(Fits$`Log Normal SD`))
+               ) - Fits$`Retention Index Ref`
+  )
+}))
+
+dist_matches %>% 
+  mutate(
+    Score = ifelse(Metabolite %in% c("fumaric acid", "D-xylose 2"), "Best Performance: Original Score", 
+                   "Best Performance: Other Score"),
+    Truth = factor(ifelse(Metabolite %in% c("fumaric acid", "L-valine"), "True Positive Rank 5", 
+                          "True Negative Rank 5"), levels = c("True Positive Rank 5", "True Negative Rank 5"))
+  ) %>% 
+  ggplot(aes(x = Values, fill = Distribution)) + geom_density(alpha = 0.5) +
+  scale_fill_manual(values = list("Gamma" = "red", "Log Normal" = "orange", 
+                                  "Logistic" = "green", "Original" = "steelblue",
+                                  "Original Adjusted & Normal" = "violet",
+                                  "Query" = "black")) + theme_bw() +
+  facet_grid(cols = vars(Score), rows = vars(Truth), scales = "free") + 
+  xlab("Query Retention Index - Reference Retention Index") + ylab("Density")
+```
+
+**Figure 8: Estimated distributions for each score overlaid on the retention index query distribution, centered to each metabolite’s reference retention index. Representative metabolites with the best performance (highest true positive proportion or lowest true negative proportion) for the original score (left column) or another distribution (right column) were selected for both true positives (top row) and true negatives (bottom row).**
+
+If the original score's assumed distribution tends to fit the $RI_Q$ distribution, it
+performs better than the cases where the assumed distribution is not a good fit (**Fig. 8**).
+
+# Holdout with Subset Only
+
+The final question relates to whether the results change if we do a holdout analysis
+with only our subset metabolites and all their true positive, true negative, and 
+unknown annotations. 
+
+```{r, messages = F, warning=F, error=F}
+SubAdjHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Subset_Holdout/NormAdjHoldout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+SubNormalHoldout  <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Subset_Holdout/NormProbHoldout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+SubGammaHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Subset_Holdout/GammaProbHoldout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+SubLogisticHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Subset_Holdout/LogisticProbHoldout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+SubLogNormalHoldout <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Subset_Holdout/LogNormProbHoldout/", full.names = T), function(x) {
+    fread(x)
+  }))
+
+SubRanks <- rbind(
+  get_ranks_orig(SubAdjHoldout, "Original"),
+  get_ranks_all(SubAdjHoldout, "Original Adjusted"),
+  get_ranks_all(SubNormalHoldout, "Normal"),
+  get_ranks_all(SubGammaHoldout, "Gamma"),
+  get_ranks_all(SubLogisticHoldout, "Logistic"),
+  get_ranks_all(SubLogNormalHoldout, "Log Normal")
+) %>%
+  mutate(Score = factor(Score, levels = DataLevels))
+
+subranks_hm_plot <- function(subdf, ggtitle, ylab = "", xlab = "", legend = FALSE, ylabs = FALSE) {
+  thePlot <- ggplot(subdf, aes(x = Score, y = `Compound Name`, fill = Proportion)) + 
+    geom_tile() + theme_bw() + ylab(ylab) + xlab(xlab) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1)) + 
+    scale_fill_gradient2(low = scales::muted("violet"), high = scales::muted("blue"), 
+                         midpoint = 0.25, mid =  "#ffcccb", na.value = "red") + ggtitle(ggtitle) +
+    theme(legend.title = element_text(size = 8), axis.text.y = element_text(size = 6)) +
+    guides(fill = guide_legend(order = 1), shape = guide_legend(order = 2))
+  if (legend == FALSE) {thePlot <- thePlot + theme(legend.position = "none")}
+  if (ylabs == FALSE) {thePlot <- thePlot + theme(axis.text.y = element_blank())}
+  return(thePlot)
+}
+
+holdout_sub_plot <- (
+subranks_hm_plot(SubRanks %>% filter(Truth == "True Positive" & Rank == 1), "True Positive, Rank 1", 
+                     "Metabolite", ylabs = TRUE) | 
+subranks_hm_plot(SubRanks %>% filter(Truth == "True Positive" & Rank == 5), "True Positive, Rank 5") | 
+subranks_hm_plot(SubRanks %>% filter(Truth == "True Negative" & Rank == 1), "True Negative, Rank 1") |
+subranks_hm_plot(SubRanks %>% filter(Truth == "True Negative" & Rank == 5), "True Negative, Rank 5",
+                 legend = TRUE))
+
+holdout_sub_plot
+```
+
+**Figure 9: Proportions of true positives (left two) and true negatives (right two) at ranks 1 and 5 per metabolite, following the 10% holdout analysis with only metabolites within our subset.**
+
+If we reduce our holdout analysis to just our subsetted compounds, the other scores
+still outperform the original (**Fig. 9**). 
+
+# Publication Figures and Tables
+
+```{r}
+Fig4 <- (KSStatPlot + ylab("")) + 
+  (AICStatPlot + ylab("") + theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())) +
+  (gen_rank_plot("True Positive", 1, xlab = "Scoring Method", legend = TRUE) + 
+     theme(axis.ticks.y = element_blank())) + 
+  plot_annotation(tag_levels = "A")
+Fig4
+```
+
+```{r}
+AllRanks %>%
+  group_by(Score, Truth, Rank) %>%
+  summarise(`Mean Proportion` = round(mean(Proportion), 4)) %>%
+  pivot_wider(id_cols = c(Truth, Rank), names_from = Score, values_from = `Mean Proportion`) %>%
+  arrange(desc(Truth)) %>%
+  dplyr::select(Truth, Rank, Original, `Original Adjusted`, Gamma, `Log Normal`, Logistic, Normal)
+```
+
+```{r}
+rank_plot
+```
+
+```{r}
+rank_explain
+```
+
+```{r}
+holdout_sub_plot
+```
+
+```{r}
+SubRanks  %>%
+  group_by(Score, Truth, Rank) %>%
+  summarise(`Mean Proportion` = round(mean(Proportion), 4)) %>%
+  pivot_wider(id_cols = c(Truth, Rank), names_from = Score, values_from = `Mean Proportion`) %>%
+  arrange(desc(Truth)) %>%
+  dplyr::select(Truth, Rank, Original, `Original Adjusted`, Gamma, `Log Normal`, Logistic, Normal)
+```
+
+# Poster Figures
+
+```{r, fig.height = 4, fig.width = 8}
+(gen_rank_plot("True Positive", 1, legend = T) + coord_flip() +
+  theme(axis.text.x = element_blank(), legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12), axis.text.y = element_text(size = 12)) + 
+  ylab("") + xlab("") + ggtitle("True Positives Rank 1") + theme(plot.title = element_text(hjust = 0.5))) /
+(gen_rank_plot("True Negative", 5, legend = T) + coord_flip() +
+   theme(axis.text.x = element_blank(), legend.title = element_text(size = 12),
+        legend.text = element_text(size = 12), axis.text.y = element_text(size = 12)) + 
+  ylab("") + xlab("") + ggtitle("True Negatives Rank 5") + theme(plot.title = element_text(hjust = 0.5)))
+```
+
+
+```{r, fig.height = 2, fig.width = 8}
+AllRanks %>%
+  group_by(Score, Truth, Rank) %>%
+  summarise(`Mean Proportion` = round(mean(Proportion), 4)) %>%
+  mutate(
+    Score = factor(Score, levels = unique(AllRanks$Score)),
+    Truth = factor(paste0(Truth, ", Rank = ", Rank), 
+                   levels = c("True Positive, Rank = 1", "True Positive, Rank = 5",
+                              "True Negative, Rank = 1", "True Negative, Rank = 5"))
+  ) %>%
+  ggplot(aes(x = Score, y = `Mean Proportion`, fill = Truth)) + 
+  geom_bar(stat = "identity", position = "dodge") + theme_bw() +
+  ylim(c(0,1)) + xlab("") + 
+  theme(
+    axis.text.x = element_text(size = 12), axis.title.y = element_text(size = 12),
+    axis.text.y = element_text(size = 12), plot.title = element_text(size = 12)
+  ) 
+ggsave("~/Downloads/NewFig4.png")
+```
+
+```{r, fig.height = 4, fig.width = 6}
+norm_plot_data <- density(x = rnorm(100000))
+norm_plot_data <- data.frame(x = norm_plot_data$x, y = norm_plot_data$y)
+  
+(ggplot(norm_plot_data, aes(x = x, y = y)) +
+  geom_area(data = subset(norm_plot_data, norm_plot_data$x < -0.25), aes(x=x, y=y), fill="grey") +
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed") +
+  geom_line() + theme_void() + ggtitle("Modeled Retention Index Distribution") +
+  theme(plot.title = element_text(hjust = 0.5, size = 22))) /
+(ggplot(norm_plot_data, aes(x = x, y = y)) +
+  geom_area(data = subset(norm_plot_data, norm_plot_data$x > 1.5), aes(x=x, y=y), fill="grey") +
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed")+
+  geom_line() + theme_void())
+```
+
+```{r, fig.height = 1, fig.width = 6}
+make_dens_plot <- function(metab, metab_name, legend = FALSE) {
+  Dist <- unlist(Anno30[Anno30$`Compound Name` == metab, "Retention Index"])
+  thePlot <- data.table(
+    `Retention Index` = c(Dist, rnorm(10000, mean = mean(Dist), sd = sd(Dist))),
+    Distribution = c(rep("Actual", length(Dist)), rep("Modeled", 10000))
+  ) %>%
+    ggplot(aes(x = `Retention Index`, fill = Distribution)) + geom_density(alpha = 0.5) + theme_bw() +
+    ylab("") + theme(axis.ticks.y = element_blank(), axis.text.y = element_blank(), 
+                     axis.text.x = element_text(size = 8),
+                     plot.title = element_text(hjust = 0.5)) + 
+    ggtitle(metab_name)
+  if (legend == FALSE) {
+    thePlot <- thePlot + theme(legend.position = "none")
+  }
+  return(thePlot)
+}
+
+make_dens_plot("L-glutamic acid [major]", "L-glutamic acid") |
+  make_dens_plot("[1198] isocitric acid [16.847]", "isocitric acid", T) 
+```
+
+
+

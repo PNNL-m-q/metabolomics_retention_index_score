@@ -1,0 +1,299 @@
+Compound Name	Sample Type	Count
+[1004] phosphoric acid [9.966]	CSF	150
+[1004] phosphoric acid [9.966]	Fungi	15
+[1004] phosphoric acid [9.966]	Plasma	85
+[1004] phosphoric acid [9.966]	Soil Crust	2
+[1030] propylene glycol [6.144]	CSF	35
+[1030] propylene glycol [6.144]	Plasma	6
+[1030] propylene glycol [6.144]	Soil Crust	3
+[11005] myristic acid [16.887]	CSF	203
+[11005] myristic acid [16.887]	Fungi	11
+[11266] 2-hydroxybutyric acid [7.852]	CSF	202
+[11266] 2-hydroxybutyric acid [7.852]	Plasma	59
+[1174] uracil [10.777]	Fungi	12
+[1174] uracil [10.777]	Plasma	29
+[1174] uracil [10.777]	Soil Crust	9
+[1174] uracil [10.777]	Standard	2
+[1174] uracil [10.777]	Urine	31
+[1175] uric acid 1 [19.331]	Plasma	32
+[1176] urea [9.599]	Fungi	2
+[1176] urea [9.599]	Plasma	31
+[1176] urea [9.599]	Soil Crust	9
+[1176] urea [9.599]	Urine	41
+[1198] isocitric acid [16.847]	Fungi	1
+[1198] isocitric acid [16.847]	Urine	33
+[128869] galactonic acid [18.773]	Fungi	5
+[128869] galactonic acid [18.773]	Urine	32
+[159664] 2-ketocaproic acid [9.707]	Plasma	47
+[2723970] glycine-d5 deuterated [10.446]	Plasma	32
+[289] catechol [10.524]	Urine	44
+[439194] glyceric acid [10.735]	CSF	204
+[439194] glyceric acid [10.735]	Fungi	13
+[439194] glyceric acid [10.735]	Plasma	49
+[439194] glyceric acid [10.735]	Soil Crust	2
+[439194] glyceric acid [10.735]	Urine	31
+[439766] citramalic acid [12.753]	Urine	60
+[444212] trans-aconitic acid [15.970]	CSF	50
+[444212] trans-aconitic acid [15.970]	Plasma	6
+[444212] trans-aconitic acid [15.970]	Urine	64
+[444972] fumaric acid [10.94]	Fungi	18
+[444972] fumaric acid [10.94]	Plasma	17
+[444972] fumaric acid [10.94]	Urine	16
+[445639] oleic acid [20.504]	Fungi	7
+[445639] oleic acid [20.504]	Plasma	22
+[445639] oleic acid [20.504]	Standard	1
+[464] hippuric acid 2 [16.87]	Urine	32
+[5280450] linoleic acid [20.399]	Fungi	24
+[5280450] linoleic acid [20.399]	Soil Crust	4
+[5280450] linoleic acid [20.399]	Standard	2
+[5281] stearic acid [20.675]	Fungi	23
+[5281] stearic acid [20.675]	Soil Crust	7
+[588] Creatinine [13.825]	CSF	201
+[588] Creatinine [13.825]	Plasma	27
+[588] Creatinine [13.825]	Urine	63
+[6251] D-mannitol [18.130]	CSF	197
+[6251] D-mannitol [18.130]	Fungi	20
+[6251] D-mannitol [18.130]	Plasma	3
+[6251] D-mannitol [18.130]	Soil Crust	14
+[6251] D-mannitol [18.130]	Standard	4
+[6251] D-mannitol [18.130]	Urine	33
+[64956] DL-3-aminoisobutyric acid 2 [12.567]	Fungi	8
+[64956] DL-3-aminoisobutyric acid 2 [12.567]	Soil Crust	1
+[64956] DL-3-aminoisobutyric acid 2 [12.567]	Urine	30
+[65098] norvaline 2 [9.468]	Plasma	27
+[65098] norvaline 2 [9.468]	Soil Crust	4
+[65098] norvaline 2 [9.468]	Urine	33
+[68374] 7-methylxanthine [19.176]	Urine	53
+[6912] xylitol [15.701]	CSF	174
+[6912] xylitol [15.701]	Fungi	18
+[6912] xylitol [15.701]	Plasma	11
+[6912] xylitol [15.701]	Soil Crust	9
+[6912] xylitol [15.701]	Standard	2
+[6912] xylitol [15.701]	Urine	64
+[753] glycerol [9.941]	CSF	191
+[753] glycerol [9.941]	Fungi	5
+[753] glycerol [9.941]	Plasma	36
+[753] glycerol [9.941]	Soil Crust	16
+[753] glycerol [9.941]	Standard	2
+[767] carbonate ion [8.139]	CSF	159
+[767] carbonate ion [8.139]	Fungi	13
+[767] carbonate ion [8.139]	Plasma	31
+[767] carbonate ion [8.139]	Soil Crust	11
+[8897] iminodiacetic acid 2 [13.285]	Plasma	30
+[892] myo-inositol [19.707]	CSF	199
+[892] myo-inositol [19.707]	Fungi	19
+[892] myo-inositol [19.707]	Soil Crust	16
+[892] scyllo-inositol [19.101]	CSF	165
+[892] scyllo-inositol [19.101]	Fungi	12
+[892] scyllo-inositol [19.101]	Soil Crust	6
+[892] scyllo-inositol [19.101]	Urine	67
+[94154] arabitol [15.601]	Fungi	1
+[94154] arabitol [15.601]	Soil Crust	6
+[94154] arabitol [15.601]	Standard	2
+[94154] arabitol [15.601]	Urine	33
+[985] palmitic acid [18.846]	Fungi	22
+[985] palmitic acid [18.846]	Plasma	60
+[985] palmitic acid [18.846]	Soil Crust	12
+[985] palmitic acid [18.846]	Standard	2
+[PNNLMET0022] galactitol [18.196]	CSF	175
+[PNNLMET0022] galactitol [18.196]	Fungi	8
+[PNNLMET0022] galactitol [18.196]	Soil Crust	13
+[PNNLMET0022] galactitol [18.196]	Standard	3
+[PNNLMET0022] galactitol [18.196]	Urine	30
+[PNNLMET0025] D-gluconic acid 3 [18.800]	Fungi	11
+[PNNLMET0025] D-gluconic acid 3 [18.800]	Plasma	1
+[PNNLMET0025] D-gluconic acid 3 [18.800]	Urine	32
+[PNNLMET0026] erythritol [13.176]	CSF	204
+[PNNLMET0026] erythritol [13.176]	Fungi	22
+[PNNLMET0026] erythritol [13.176]	Soil Crust	1
+[PNNLMET0026] erythritol [13.176]	Standard	2
+[PNNLMET0026] erythritol [13.176]	Urine	64
+[PNNLMET0027] D-threitol [13.128]	CSF	193
+[PNNLMET0027] D-threitol [13.128]	Fungi	9
+[PNNLMET0027] D-threitol [13.128]	Plasma	42
+[PNNLMET0027] D-threitol [13.128]	Soil Crust	5
+[PNNLMET0027] D-threitol [13.128]	Urine	31
+[PNNLMET0028] D-saccharic acid [19.929]	Urine	32
+[PNNLMET0029] D-galacturonic acid 1(M) [18.207]	Fungi	3
+[PNNLMET0029] D-galacturonic acid 1(M) [18.207]	Urine	28
+[PNNLMET0037] IS benzoic acid d5 [9.687]	CSF	163
+[PNNLMET0037] IS benzoic acid d5 [9.687]	Plasma	30
+[PNNLMET0037] IS benzoic acid d5 [9.687]	Urine	66
+[PNNLMET0038] IS citric acid d4 [17.807]	Plasma	59
+[PNNLMET0039] IS D-fructose 13C6 1(M) [17.471]	Plasma	27
+[PNNLMET0039] IS D-fructose 13C6 1(M) [17.471]	Urine	30
+[PNNLMET0039] IS D-fructose 13C6 2 [17.571]	Plasma	44
+[PNNLMET0040] Impurity 001 [12.148]	CSF	192
+[PNNLMET0040] Impurity 001 [12.148]	Fungi	1
+[PNNLMET0040] Impurity 001 [12.148]	Plasma	33
+[PNNLMET0041] IS L-alanine d7 [7.729]	CSF	188
+[PNNLMET0041] IS L-alanine d7 [7.729]	Plasma	55
+[PNNLMET0041] IS L-alanine d7 [7.729]	Urine	32
+[PNNLMET0043] IS octanoic acid d15 [9.751]	CSF	190
+[PNNLMET0043] IS octanoic acid d15 [9.751]	Plasma	32
+[PNNLMET0043] IS octanoic acid d15 [9.751]	Urine	32
+[PNNLMET0047] IS L-tryptophan d5 1 [20.486]	Plasma	88
+[PNNLMET0047] IS L-tryptophan d5 2 [20.625]	CSF	203
+[PNNLMET0047] IS L-tryptophan d5 2 [20.625]	Plasma	60
+[PNNLMET0047] IS L-tryptophan d5 2 [20.625]	Urine	33
+[PNNLMET0059] N-formylglycine 2[M] [11.531]	Plasma	31
+[PNNLMET0061] 6-hydroxy-alpha-methylnaphthaleneacetic acid [20.102]	Plasma	30
+[PNNLMET0075] D-ribose [15.360]	Fungi	21
+[PNNLMET0075] D-ribose [15.360]	Soil Crust	11
+[PNNLMET0075] D-ribose [15.360]	Standard	12
+[PNNLMET0075] D-ribose [15.360]	Urine	30
+[PNNLMET0076] D-xylose 2[M] [15.125]	Fungi	14
+[PNNLMET0076] D-xylose 2[M] [15.125]	Soil Crust	14
+[PNNLMET0076] D-xylose 2[M] [15.125]	Standard	12
+[PNNLMET0076] D-xylose 2[M] [15.125]	Urine	60
+[PNNLMET0077] D-arabinose [15.198]	Fungi	16
+[PNNLMET0077] D-arabinose [15.198]	Standard	12
+[PNNLMET0077] D-arabinose [15.198]	Urine	62
+[PNNLMET0078] D-lyxose 2[M] [15.117]	CSF	204
+[PNNLMET0078] D-lyxose 2[M] [15.117]	Fungi	1
+[PNNLMET0078] D-lyxose 2[M] [15.117]	Soil Crust	3
+[PNNLMET0084] lactose 2 [25.003]	Urine	32
+[PNNLMET0104] ribitol [15.920]	CSF	1
+[PNNLMET0104] ribitol [15.920]	Fungi	18
+[PNNLMET0104] ribitol [15.920]	Soil Crust	12
+[PNNLMET0104] ribitol [15.920]	Standard	2
+[PNNLMET0104] ribitol [15.920]	Urine	63
+4-hydroxyphenylacetic acid	Soil Crust	7
+4-hydroxyphenylacetic acid	Urine	32
+citric acid	CSF	203
+citric acid	Fungi	19
+citric acid	Plasma	3
+citric acid	Urine	31
+D-fructose [major]	CSF	192
+D-fructose [major]	Fungi	18
+D-fructose [major]	Soil Crust	13
+D-fructose [major]	Standard	11
+D-fructose [major]	Urine	29
+D-fructose [minor]	CSF	14
+D-fructose [minor]	Fungi	17
+D-fructose [minor]	Soil Crust	13
+D-fructose [minor]	Standard	12
+D-galactose [major]	Fungi	9
+D-galactose [major]	Soil Crust	6
+D-galactose [major]	Standard	14
+D-galactose [major]	Urine	32
+D-glucose [major]	CSF	52
+D-glucose [major]	Fungi	23
+D-glucose [major]	Plasma	34
+D-glucose [major]	Soil Crust	15
+D-glucose [major]	Standard	14
+D-glucose [major]	Urine	29
+D-glucose [minor]	CSF	201
+D-glucose [minor]	Fungi	17
+D-glucose [minor]	Plasma	33
+D-glucose [minor]	Soil Crust	15
+D-glucose [minor]	Standard	4
+D-glucose [minor]	Urine	33
+D-mannose [major]	Fungi	3
+D-mannose [major]	Soil Crust	5
+D-mannose [major]	Standard	14
+D-mannose [major]	Urine	25
+ethanolamine	CSF	193
+ethanolamine	Fungi	15
+ethanolamine	Plasma	25
+ethanolamine	Soil Crust	10
+ethanolamine	Standard	2
+glycine	CSF	70
+glycine	Fungi	11
+glycine	Soil Crust	6
+glycine	Standard	5
+glycine	Urine	64
+L-alanine [major]	CSF	70
+L-alanine [major]	Fungi	14
+L-alanine [major]	Plasma	64
+L-alanine [major]	Soil Crust	14
+L-alanine [major]	Standard	10
+L-alanine [major]	Urine	64
+L-aspartic acid [major]	Fungi	2
+L-aspartic acid [major]	Plasma	16
+L-aspartic acid [major]	Standard	14
+L-cysteine [major]	Fungi	7
+L-cysteine [major]	Plasma	26
+L-cysteine [major]	Standard	6
+L-glutamic acid [major]	Fungi	14
+L-glutamic acid [major]	Plasma	85
+L-glutamic acid [major]	Soil Crust	10
+L-glutamic acid [major]	Standard	7
+L-glutamine [major]	CSF	204
+L-glutamine [major]	Plasma	82
+L-glutamine [major]	Standard	3
+L-glutamine [major]	Urine	14
+L-glutamine [minor 2]	CSF	204
+L-glutamine [minor 2]	Standard	4
+L-glutamine [minor 2]	Urine	31
+L-isoleucine [major]	CSF	198
+L-isoleucine [major]	Fungi	10
+L-isoleucine [major]	Plasma	88
+L-isoleucine [major]	Soil Crust	4
+L-isoleucine [major]	Standard	14
+L-isoleucine [major]	Urine	22
+L-leucine [major]	CSF	131
+L-leucine [major]	Fungi	12
+L-leucine [major]	Plasma	86
+L-leucine [major]	Soil Crust	7
+L-leucine [major]	Standard	11
+L-lysine [major]	Fungi	2
+L-lysine [major]	Plasma	24
+L-lysine [major]	Standard	7
+L-methionine [major]	Plasma	62
+L-methionine [major]	Soil Crust	1
+L-methionine [major]	Standard	2
+L-ornithine [major]	Plasma	84
+L-ornithine [major]	Standard	6
+L-phenylalanine [major]	CSF	203
+L-phenylalanine [major]	Fungi	4
+L-phenylalanine [major]	Plasma	88
+L-phenylalanine [major]	Soil Crust	4
+L-phenylalanine [major]	Standard	9
+L-phenylalanine [major]	Urine	6
+L-proline [major]	CSF	1
+L-proline [major]	Fungi	11
+L-proline [major]	Plasma	54
+L-proline [major]	Soil Crust	2
+L-proline [major]	Standard	6
+L-pyroglutamic acid	CSF	174
+L-pyroglutamic acid	Fungi	11
+L-pyroglutamic acid	Plasma	88
+L-pyroglutamic acid	Soil Crust	8
+L-pyroglutamic acid	Standard	4
+L-pyroglutamic acid	Urine	32
+L-serine [major]	CSF	204
+L-serine [major]	Fungi	15
+L-serine [major]	Plasma	87
+L-serine [major]	Soil Crust	6
+L-serine [major]	Standard	9
+L-serine [major]	Urine	66
+L-threonine [major]	CSF	204
+L-threonine [major]	Fungi	16
+L-threonine [major]	Plasma	88
+L-threonine [major]	Soil Crust	16
+L-threonine [major]	Standard	10
+L-threonine [major]	Urine	64
+L-tyrosine [major]	Plasma	62
+L-tyrosine [major]	Soil Crust	2
+L-tyrosine [major]	Standard	10
+L-tyrosine [major]	Urine	56
+L-tyrosine [minor]	Fungi	7
+L-tyrosine [minor]	Plasma	27
+L-tyrosine [minor]	Soil Crust	12
+L-tyrosine [minor]	Standard	9
+L-valine [major]	CSF	30
+L-valine [major]	Fungi	16
+L-valine [major]	Soil Crust	13
+L-valine [major]	Standard	8
+lactic acid	Fungi	21
+lactic acid	Soil Crust	12
+oxalic acid	Fungi	15
+oxalic acid	Plasma	84
+oxalic acid	Standard	2
+oxalic acid	Urine	65
+sucrose	CSF	9
+sucrose	Fungi	3
+sucrose	Soil Crust	16
+sucrose	Standard	14
+sucrose	Urine	33

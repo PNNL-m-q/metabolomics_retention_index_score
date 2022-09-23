@@ -1,0 +1,489 @@
+---
+title: "Retention Index Data Description"
+author: "Degnan, David J. & Bramer, Lisa M."
+date: "Last updated: 09/23/2022"
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+    lib_dir: trelli
+---
+
+```{r Setup, include=FALSE}
+path <- "~/Desktop/Git_Repos/metabolomics_scoring_metrics/Retention_Index/Markdowns/1-Retention-Index-Score-Assumptions/"
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(rootdir = path)
+#setwd(path)
+library(plotly); library(ggplot2); library(ggpubr); library(knitr); library(DT); 
+library(trelliscopejs); library(gapminder); library(dplyr); 
+library(tidyr); library(purrr); library(e1071); library(Hmisc); library(ggpubr);
+library(data.table); library(grDevices); library(patchwork); library(lubridate);
+library(patchwork); library(cowplot)
+```
+
+# General Data Descriptions
+
+## Terms
+
+**Sample:** Identification results from a mass spectra file from with a standard sample
+(known compounds) or complex sample (not all compounds known - fungi, urine, etc.).
+
+**Dataset:** Collection of samples with run with one FAMEs dataset, which is 
+used by CoreMS to calculate retention indices to assign metabolites to spectra
+
+**Metabolite:** An identified compound formed in or necessary for metabolism. We
+generally refer to our dataset as "small molecules".
+
+## Datasets
+
+```{r Load Data}
+# Read in the verified and cleaned annotation data
+CoreMS_Files <- list.files("../../../Data/CoreMS_Identification/", full.names = T)
+#
+### Pull all true positives 
+#Annotations <- do.call(rbind, lapply(CoreMS_Files, function(x) {
+#  
+#  # Read data 
+#  MQ <- fread(x)
+#  
+#  # Return true positives and the required rows only if true positives exist
+#  if (nrow(MQ[MQ$`Truth Annotation` == "True.Positive"]) != 0) {
+#    TP <- MQ[MQ$`Truth Annotation` == "True.Positive",]
+#    TP %>% 
+#      select(`Sample Name`, `Peak Index`, `Retention Time`, `Retention Time Ref`, 
+#             `Retention Index`, `Retention Index Ref`, `Compound Name`, `Peak Area`) %>%
+#      return()
+#  }
+#  
+#}))
+#fwrite(Annotations, "~/Downloads/AnnoTP.txt", sep = "\t", quote = F, row.names = F)
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+
+# Read in the sample metadata 
+SampleMetadata <- fread("../../../Data/Metadata/Sample_Metadata.csv")
+SampleMetadata$`Sample Type`[SampleMetadata$`Sample Type` == "Standard Mixture"] <- "Standard"
+
+# Make a permanent sample coloring scheme
+SampleColorVector <- c("CSF" = "forestgreen", "Fungi" = "steelblue", "Plasma" = "red",
+                       "Soil Crust" = "brown", "Standard" = "black", "Urine" = "darkorange")
+```
+
+The current data used for all below retention index analyses was comprised on 
+12.30.21 and contains `r length(CoreMS_Files)` datasets with `r nrow(Annotations)`
+true positive annotations. 
+
+## Sample Types
+
+```{r Sample Types, echo = F}
+# Count the metabolite data 
+MetaboliteCount <- table(Annotations$`Compound Name`, dnn = c("Compound.Name")) %>%
+  data.frame() %>%
+  mutate("Label" = ifelse(Freq >= 30, ">=30", "<30"))
+
+# Number of metabolites greater than or equal to 30 samples
+MetaboNum <- nrow(MetaboliteCount[MetaboliteCount$Freq >= 30,])
+
+# Subset annotation data to only the top 30 metabolites
+Anno30 <- Annotations[Annotations$`Compound Name` %in% 
+                      MetaboliteCount[MetaboliteCount$Freq >= 30, "Compound.Name"],]
+
+# Merge annotations with retention index difference
+Annotations <- merge(Annotations, SampleMetadata, by = "Sample Name")
+Anno30 <- merge(Anno30, SampleMetadata, by = "Sample Name")
+
+# Create boxplot of data per sample and metabolite
+SampleType <- Annotations %>% 
+  select(`Sample Type`, `Sample Name`) %>% 
+  unique() %>% 
+  select(`Sample Type`) %>% 
+  mutate(`Sample Type` = ifelse(`Sample Type` == "Standard Mixture", "Standard", `Sample Type`)) %>%
+  table(dnn = "Sample Type") %>% 
+  data.frame() %>%   
+  rename(`Sample Type` = Sample.Type) %>%
+  arrange(desc(Freq)) %>%
+  rename(`# Samples` = Freq) %>%
+  mutate(`# Metabolites` = Annotations %>% 
+           select(`Sample Type`) %>% 
+           mutate(`Sample Type` = ifelse(`Sample Type` == "Standard Mixture", "Standard", `Sample Type`)) %>%
+           table() %>% 
+           data.frame() %>%
+           select(Freq) %>%
+           unlist(),
+         Rate = (`# Metabolites` / `# Samples`) %>% round(2)
+  )
+
+# Unique Sample Types
+UNIQUE_SAMPLES_WITH_ANNOTATIONS <- ggplot(SampleType, 
+    aes(x = `Sample Type`, y = `# Samples`, fill = `Sample Type`)) + 
+  geom_bar(stat = "identity", color = "black") + theme_bw() + 
+  geom_text(aes(label = `# Metabolites`), position = position_dodge(width = 0.9), 
+  vjust = -0.25) + ggtitle("") + 
+  theme(legend.position = "none") + ylim(c(0, 250)) + 
+  ggtitle("Number of samples per type, with number of true positives") + 
+  scale_fill_manual(values = SampleColorVector)
+  
+
+UNIQUE_SAMPLES_WITH_ANNOTATIONS 
+```
+
+**Figure 1: The count of samples per sample type included in this study, with the number of metabolites across all of those samples above.**
+
+A majority of metabolites are cerebrospinal fluid, followed by Standards and Soil Crust (**Fig. 1**).
+Fungi has the lowest count of metabolites. The metabolite true positive rates are 
+as follows: 
+
+```{r True Positive Rate}
+Annotations %>%
+  select(c(`Sample Name`, `Sample Type`)) %>%
+  group_by(`Sample Type`) %>%
+  summarise(
+    Count = length(unique(`Sample Name`)),
+    Total = length(`Sample Name`)
+  ) %>%
+  mutate(
+    `True Positive Rate` = round(Total / Count, 4)
+  ) %>%
+  select(-c(Count, Total)) %>%
+  arrange(-`True Positive Rate`)
+```
+
+## Metabolites
+
+```{r Metabolites, echo = F}
+# Make plot
+ggplot(data = MetaboliteCount, aes(x = Freq, fill = Label)) +
+  geom_histogram(color = "black", binwidth = 20) + 
+  theme_bw() + ylab("Frequency") + geom_vline(xintercept = 30) + 
+  xlab("Total number of samples per verified metabolite") +    
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  ggtitle(paste0("The number of samples >= 30 is ", MetaboNum, ". Bin size is 20.")) +
+  stat_bin(aes(y = ..count.., label = ifelse(..count.. > 0, ..count.., "")), binwidth = 20, geom = "text", 
+    vjust = -0.25)
+```
+
+**Figure 2: The frequency of each metabolite's number of samples in bins of 20. For example, a sample with n = 9 would be counted in the first bin, and a sample with n = 32 would be counted in the second bin. Red bars are the counts of identified metabolites with less than 30 samples, and blue is the count of metabolites with more than or equal to 30 samples.**
+
+A majority of metabolites (`r nrow(MetaboliteCount) - MetaboNum` of 
+`r nrow(MetaboliteCount)`) have less than 30 samples. Of the remaining metabolites, 
+`r nrow(MetaboliteCount[MetaboliteCount$Freq >= 30,])` have >= 30, 
+`r nrow(MetaboliteCount[MetaboliteCount$Freq >= 100,])` have >= 100, and
+`r nrow(MetaboliteCount[MetaboliteCount$Freq >= 250,])` have >= 250 (**Fig. 2**).
+
+# Retention Index Difference Trends
+
+## General
+
+```{r RID_General, echo = F, warning = F, message = F, error = F}
+Annotations$`Retention Index Difference` <- Annotations$`Retention Index` - Annotations$`Retention Index Ref`
+Anno30$`Retention Index Difference` <- Anno30$`Retention Index` - Anno30$`Retention Index Ref`
+
+# Make a plot to display RID distribution across all metabolites
+RID_ALL_METABOLITES <- ggplot(Annotations, aes(x = `Retention Index Difference`)) +
+  geom_histogram(binwidth = 3, fill = "black", col = "white", drop = TRUE) +
+  theme_bw() + ylab("Frequency") + ylim(c(0, 3200)) + 
+  ggtitle("All Metabolites") + xlab(expression(RI[Q]-RI[R])) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Make a plot to display RID distribution across all metabolites
+RID_30_METABOLITES <- ggplot(Anno30, aes(x = `Retention Index Difference`)) +
+  geom_histogram(binwidth = 3, fill = "black", col = "white", drop = TRUE) +
+  theme_bw() + ylab("Frequency") + ylim(c(0, 3200)) + 
+  ggtitle("n>=30 Subset") + xlab(expression(RI[Q]-RI[R])) +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+RID_ALL_METABOLITES + RID_30_METABOLITES
+```
+
+**Figure 3: The retention index distribution across all verified metabolites (left) and across the subset of samples with at least 30 identifications (right).**
+
+A majority of metabolites fall within a retention difference of -30 and 30. The shapes of
+the distributions for the full data and the N>=30 subset are similar (**Fig. 3**).  
+This means we are confident that are N>=30 subset reflects the overall dataset
+and feel comfortable moving forward with this data. 
+
+**NOTE:** All results beyond this point are for metabolites with an N >= 30 *ONLY.*
+
+## Per Metabolite
+
+```{r RID_PerMetabolite, echo = F, warning = F, message = F, error = F}
+# Define a function to create a boxplot per metabolite: =
+boxplotPerMetabolite <- function(RID) {
+  `Compound Name` = RID$`Compound Name Group`
+  `Retention Index Difference` = RID$`Retention Index Difference`
+  a <- ggplot(data = RID, aes(x = `Compound Name`, y = `Retention Index Difference`)) +
+    geom_boxplot(fill = "steelblue") + theme_bw() + xlab(`Compound Name`) + 
+    geom_point(position = position_jitter(w = 0.05, h = 0), size = 0.5) + 
+    ylim(c(-40,40)) + theme(axis.text.x=element_blank()) +
+    geom_hline(yintercept = 0, color = "red")
+  return(a %>% ggplotly())
+}
+
+# Define a cognostic function for the boxplots per metabolite
+cogPerMetabolite <- function(x) {
+  tibble(`Metabolite Count` = cog(nrow(x), desc = "Metabolite Count"),
+         `Mean RID` = cog(round(mean(x$`Retention Index Difference`), 4), desc = "RID Mean"),
+         `Standard Deviation RID` = cog(round(sd(x$`Retention Index Difference`), 4), desc = "RID SD"),
+         `Median RID` = cog(round(median(x$`Retention Index Difference`), 4), desc = "RID Median"),
+         `Shapiro Test for Normality` = cog(round(shapiro.test(x$`Retention Index Difference`)$p.value, 4),
+           desc = "Shapiro Normality"),
+         `T Test: Mean is 0` = cog(round(t.test(x$`Retention Index Difference`)$p.value, 4), 
+           desc = "T-Test Mean 0"),
+         Skew = cog(round(skewness(x$`Retention Index Difference`), 4), desc = "Skew")
+  )
+}
+
+# Make trelliscope
+#Anno30 %>%
+#  select(`Compound Name`, `Retention Index Difference`) %>% 
+#  mutate("Compound Name Group" = `Compound Name`) %>%
+#  group_by(`Compound Name`) %>%
+#  nest() %>% 
+#  ungroup() %>%
+#  mutate(panel = map_plot(data, boxplotPerMetabolite), 
+#         cogs = map_cog(data, cogPerMetabolite)) %>%
+#  trelliscope(path = "./Trelli1",
+#              name = "RID Per Metabolite", nrow = 1, ncol = 1, thumb = T)
+```
+
+See Trelli 1. 
+
+**Trelliscope 1: The retention index difference distribution per metabolite.**
+
+A majority of metabolites do not have a median retention index difference of 0 (**Trelliscope 1**).
+
+## Per Metadata
+
+A few metabolites have extreme metadata variable values. For example, creatinine 
+is highly water soluble, propylene glycol has high water pressure, sucrose has a 
+high Weiner index, etc. There does not appear to be an obvious relationship between 
+a metadata variable and retention index difference, though we may explore the
+relatioship between metadata variables and retention index score downstream. 
+
+## Per Sample Metadata
+
+```{r RID_PerSampleMetadata, echo = F, warning = F, message = F, error = F}
+# Convert to date time format
+Anno30$Time <- as.Date(Anno30$Time, "%m/%d/%Y") + years(2000)
+
+RID_PER_SAMPLE_TYPE <- ggplot(Anno30, aes(x = `Sample Type`, 
+                                          y = `Retention Index Difference`, fill = `Sample Type`)) + 
+  geom_boxplot() + theme_bw() +
+  geom_point(position = position_jitter(w = 0.05, h = 0), size = 0.5) +
+  ylab("Retention Index Difference") + xlab("Sample Type") +
+  theme(axis.text.x=element_blank(), legend.position = "none")
+
+RID_PER_TIME <- ggplot(Anno30, aes(x = Time, y = `Retention Index Difference`, color = `Sample Type`)) + 
+  geom_point() + theme_bw() + ylab("") + xlab("Years")
+
+RID_PER_SAMPLE_TYPE + RID_PER_TIME
+```
+
+**Figure 4: Retention index difference distributions per sample type (left) and in years since 2000 (right).**
+
+There are no obvious trends between retention index differences and sample
+type, which means sample type alone is not enough to explain the differences
+in retention index (**Fig. 4**). This provide some validation for combining
+the data across sample type. CSF, Plasma, and Urine have the largest spread of RIDs and comprise
+a majority of the samples. The median RID for plasma is lower than the other sample
+types, but it does have the least number of samples (127). Any changes in retention 
+index that appear to be correlated with time are likely confounded with sample type
+(**Fig. 4**). If there really was a relationship with time, we would expect the 
+retention time for the FAMES standards to drift.
+
+```{r FAMES Drift, warning = F, echo = F}
+# Load FAMES data 
+FAMES <- fread("../../RI_Specific_Data/FAMES.csv")
+
+# Extract times 
+FAMES$Date <- FAMES$`Sample name` %>%
+  strsplit("_") %>%
+  lapply(function(x) tail(x, 1)) %>%
+  unlist() %>%
+  as.Date("%Y%m%d")
+
+# Simplify name
+FAMES$FAME <- FAMES$`Compound Name` %>%
+  strsplit("]", fixed = T) %>%
+  lapply(function(x) {x <- head(x, 1)
+                      gsub("[", "", x, fixed = T)}) %>%
+  unlist()
+FAMES$FAME <- factor(FAMES$FAME, levels = c("C28", "C26", "C24", "C22", "C20", "C18",
+                                            "C16", "C14", "C12", "C10", "C9", "C8"))
+
+FAMES %>%
+  ggplot(aes(x = Date, y = `Retention Time`, color = FAME)) + 
+  geom_point() + theme_bw() 
+```
+
+**Figure 5: FAMES retention time versus date the sample was collected.**
+
+There is no convincing evidence that retention times for FAMES standards drift 
+with time (**Fig. 5**). Variations in retention time may be better explained by 
+sample type (**Fig. 4**) or that there is natural variation each time samples are 
+collected. 
+
+## Per Theoretical RI
+
+```{r, RID_PerTheoRI, echo = F, warning = F, message = F, error = F}
+# Set bin breaks
+RI_breaks <- c(0, 500, 1000, 1500, 2000, 2500, 3000)
+
+# Make MQ Bin Dataframe
+MQ_Bin <- Anno30 %>% 
+  select(`Compound Name`, `Retention Index Difference`, Time, `Retention Index Ref`) %>% 
+  mutate(RI_Bins = cut(`Retention Index Ref`, breaks = RI_breaks, include.lowest = T, right = F)) %>%
+  group_by(RI_Bins) %>% 
+  nest() 
+
+plotList <- lapply(1:nrow(MQ_Bin), function(row) {
+  plotDF <- MQ_Bin[row,]$data[[1]]
+  ggplot(plotDF, aes(x = plotDF$Time, y = plotDF$`Retention Index Difference`)) +
+  geom_point() + theme_bw() + ylim(c(-40,40)) +
+  xlab("Year") + ylab("Retention Index Difference") +
+  ggtitle(paste("Retention Index Ref Bin:", as.character(MQ_Bin[row, "RI_Bins"] %>% unlist()))) +
+  theme(plot.title = element_text(size = 8))
+})
+(plotList[[1]] + plotList[[2]]) / (plotList[[3]] + plotList[[4]])
+```
+
+**Figure 6: Retention index difference per retention index reference bin (top left: 500 to 1000, top right: 1000 to 1500, bottom left 1500 to 2000, and bottom right 2000 to 2500), split by year.**
+
+To investigate whether reference retention index has a relationship with retention
+index difference, we split the data into chunks of 500 reference retention index.
+There is no obvious relationship though it is worth noting that at lower reference
+retention indices, the likelihood that the metabolite's retention index will be
+overestimated is higher (**Figure 6**). Likewise, at higher reference retention indices,
+the likelihood that the true value will be underestimated is higher. 
+
+## Per Abundance
+
+```{r RID_PerAbundance, echo = F, warning = F}
+# Create a function to make a scatter plot per log scaled abundance data 
+scatterPerAbundance10 <- function(DF) {
+  ggplot(DF, aes(x = log10(DF$Abundance), y = DF$`Retention Index Difference`)) + 
+    geom_point() + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+    xlab("Log 10 Abundance") + ylim(c(-40,40)) +
+    ylab("Retention Index Difference") + ggtitle("")
+}
+
+# Create a function to make a scatter plot per relative abundance
+scatterPerRelAbundance <- function(DF) {
+  ggplot(DF, aes(x = DF$Relative.Abundance, y = DF$`Retention Index Difference`)) + 
+    geom_point() + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) +
+    xlab("Relative Abundance") + ylim(c(-40,40)) +
+    ylab("Retention Index Difference") + ggtitle(paste(unique(DF$Compound.Name)))
+}
+
+#Anno30 %>%
+#  select(`Compound Name`, `Peak Area`, `Retention Index Difference`) %>% 
+#  rename(Abundance = `Peak Area`) %>%
+#  group_by(`Compound Name`) %>% 
+#  nest() %>%
+#  ungroup() %>%
+#  mutate(cogs = map_cog(data, cogPerMetabolite), panel = map_plot(data, scatterPerAbundance10)) %>%
+#  trelliscope(path = "./Trelli2",
+#    name = "RID by Abundance", nrow = 1, ncol = 1, thumb = T)
+
+# Run relative abundance
+Anno30_RelAbun <- Anno30
+Anno30_RelAbun$Relative.Abundance <- NULL
+for (metabolite in unique(Anno30_RelAbun$`Compound Name`)) {
+  abundance <- Anno30_RelAbun[Anno30_RelAbun$`Compound Name` == metabolite, "Peak Area"]
+  abundance <- abundance / max(abundance) * 1000
+  Anno30_RelAbun[Anno30_RelAbun$`Compound Name` == metabolite, "Relative.Abundance"] <- abundance
+}
+
+# Make data frame to hold relative abundance data 
+#Anno30_RelAbun %>%
+#  select(`Compound Name`, Relative.Abundance, `Retention Index Difference`) %>% 
+#  group_by(`Compound Name`) %>% 
+#  nest() %>%
+#  ungroup() %>%
+#  mutate(cogs = map_cog(data, cogPerMetabolite), panel = map_plot(data, scatterPerRelAbundance)) %>%
+#  trelliscope(path = "./Trelli2",
+#    name = "RID by Relative Abundance", nrow = 1, ncol = 1, thumb = T)
+```
+
+See Trelli2.
+
+**Trelliscope 2: The relationship between a metabolite's abundance and retention index difference.**
+
+There appears to be a slight drop off in RID at higher abundances, specifically
+in cases where the retention index difference is high, or the true retention index
+has been underestimated. As the abundance increases, the RID nears 0 (**Trelliscope 2**). 
+
+# Retention Index Difference Summary Stats 
+
+```{r, warnings = F, message = F}
+StatsSummary <- Anno30[,c("Compound Name", "Retention Index Difference")] %>% 
+  filter(`Compound Name` != "[PNNLMET0040] Impurity 001 [12.148]") %>%
+  group_by(`Compound Name`) %>%
+  nest() %>%
+  mutate(
+    Mean = purrr::map(data, function(x) {x$`Retention Index Difference` %>% mean()}) %>% unlist(),
+    SD = purrr::map(data, function(x) {x$`Retention Index Difference` %>% sd()}) %>% unlist(),
+    Skew = purrr::map(data, function(x) {skewness(x$`Retention Index Difference`)}) %>% unlist(),
+    N = purrr::map(data, function(x) {length(x$`Retention Index Difference`)}) %>% unlist()
+  ) %>%
+  select(-data)
+
+MEAN_PLOT <- ggplot(StatsSummary, aes(x = Mean)) + 
+  geom_histogram(color = "black", fill = "steelblue") +
+  theme_bw() + ylab("") + xlab(expression(RI[Q]-RI[R]~bar(x))) + 
+  geom_vline(xintercept = 0) + ylim(c(0,25)) 
+
+SKEW_PLOT <- ggplot(StatsSummary, aes(x = Skew)) + geom_histogram(color = "black", fill = "forestgreen") +
+  theme_bw()  + xlab(expression(RI[Q]-RI[R]~skew)) +
+  geom_vline(xintercept = 0) + ylim(c(0,25)) + ylab("")
+
+SD_PLOT <- ggplot(StatsSummary, aes(x = SD)) + geom_histogram(color = "black", fill = "firebrick4") +
+  theme_bw() + ylab("") + xlab(expression(RI[Q]-RI[R]~s)) +
+  geom_vline(xintercept = 3) + ylim(c(0,25))  + ylab("Frequency")
+
+N_PLOT <- ggplot(StatsSummary, aes(x = N)) + geom_histogram(color = "black", fill = "orchid4") +
+  theme_bw() + ylab("") + xlab(expression(RI[Q]~n)) + ylim(c(0,25)) + ylab("Frequency")
+
+(N_PLOT + MEAN_PLOT) / (SD_PLOT + SKEW_PLOT)
+```
+
+**Figure 7: The distribution of metabolite retention index distributions with assumed value by the Fiehn lab retention index marked in black. Top left: mean - assumed value is 0, top right: skew - assumed value is 0 (normal), bottom left: standard deviation - assumed value is 3, and bottom right is the count of samples which has no assumption.**
+
+The retention index distribution values for our dataset do not closely match the
+assumptions of the retention index score (**Figure 7**), where $\mu$ = 0, $\sigma$ = 3,
+and skew = 0. Next, we will see how closely our data follows these assumptions, 
+and the effects of violating these assumptions. 
+
+# Publication Figure
+
+```{r}
+((UNIQUE_SAMPLES_WITH_ANNOTATIONS + ggtitle("Sample and True Positive Counts") +
+    theme(plot.title = element_text(hjust=0.5))) + (RID_ALL_METABOLITES | RID_30_METABOLITES + ylab(""))) /
+  (N_PLOT | MEAN_PLOT | (SD_PLOT + ylab("")) | SKEW_PLOT) +
+  plot_annotation(tag_levels = 'A')
+```
+
+# Poster Figures
+
+```{r}
+UNIQUE_SAMPLES_WITH_ANNOTATIONS +
+    theme(axis.text.x = element_text(size = 16),
+        axis.title.x = element_text(size = 20),
+        axis.text.y = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        plot.title = element_text(size = 16))
+
+```
+
+```{r, fig.height = 2, fig.width = 6}
+larger <- function() {
+  theme(axis.text.x = element_text(size = 12), 
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15)
+  )
+}
+MEAN_PLOT + ylab("Frequency") + larger() | 
+  SD_PLOT + ylab("") + larger() | 
+  SKEW_PLOT + larger()
+```
+

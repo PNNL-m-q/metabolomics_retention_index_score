@@ -1,0 +1,313 @@
+---
+title: "Retention Index Normal Adjustment"
+author: "Degnan, David J. & Bramer, Lisa M. & Flores, Javier E."
+date: "Last updated: 09/23/2022"
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+    lib_dir: trelli
+---
+
+```{r Setup, include=FALSE}
+path <- "~/Desktop/Git_Repos/metabolomics_scoring_metrics/Retention_Index/Markdowns/3-Retention-Index-Normal-Adjustment/"
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(rootdir = path)
+#setwd(path)
+library(dplyr); library(data.table); library(ggplot2); library(patchwork)
+library(tidyr); library(purrr)
+```
+
+```{r Data Load}
+HoldoutData <- do.call(rbind, lapply(
+  list.files("../../RI_Specific_Data/Normal_Adj_Holdout/", full.names = T), function(x) {
+    fread(x)
+  }))
+```
+
+# Adjusting Normal Distribution Assumptions
+
+Here, we investigate the effect of adjusting each metabolite's retention index 
+score to their retention index distribution $\bar{x}$ and $s$. This approach was 
+conducted with the ri_score_holdout_analysis script. Results per metabolite can 
+be visualized in Trelli1, where the distribution of rank changes (new rank subtracted from
+original rank) is plotted. Points are colored by sample type and ordered on the x-axis from
+smallest to largest new rank. Points indicate the median of the distribution, 
+while lines indicate the range for both true positives and true negatives. 
+
+## Results Summary
+
+```{r AverageProportion}
+rankProp <- function(ranks, N) {
+  round(length(ranks[ranks <= N]) / length(ranks), 4)
+}
+
+Adjustment <- HoldoutData %>% 
+  group_by(`Compound Name`, `Truth Annotation`) %>%
+  summarise(
+    PreRank1 = rankProp(`Retention Index Rank`, 1),
+    PreRank2 = rankProp(`Retention Index Rank`, 2),
+    PreRank5 = rankProp(`Retention Index Rank`, 5),
+    PostRank1 = rankProp(`New RI Rank`, 1),
+    PostRank2 = rankProp(`New RI Rank`, 2),
+    PostRank5 = rankProp(`New RI Rank`, 5),
+  ) %>%
+  ungroup() %>%
+  group_by(`Truth Annotation`) %>%
+  summarise(
+    PreRank1 = mean(PreRank1),
+    PreRank2 = mean(PreRank2),
+    PreRank5 = mean(PreRank5),
+    PostRank1 = mean(PostRank1),
+    PostRank2 = mean(PostRank2),
+    PostRank5 = mean(PostRank5)
+  ) %>%
+  pivot_longer(c(PreRank1, PreRank2, PreRank5, PostRank1, PostRank2, PostRank5)) %>%
+  rename(
+    Type = `Truth Annotation`,
+    `Average Proportion` = value
+  ) %>%
+  mutate(
+    `Average Proportion` = round(`Average Proportion`, 4),
+    Rank = factor(paste0("Rank = ", gsub("PreRank|PostRank", "", name)), 
+                  levels = c("Rank = 1", "Rank = 2", "Rank = 5")),
+    Adjustment = factor(ifelse(grepl("PreRank", name), "Pre", "Post"), 
+                        levels = c("Pre", "Post")),
+    Type = factor(gsub(".", " ", Type, fixed = T), levels = c("True Positive", "True Negative"))
+  ) %>%
+  select(-name) %>%
+  ggplot(aes(x = Adjustment, y = `Average Proportion`, fill = Adjustment)) + geom_bar(stat = "identity") +
+  theme_bw() + theme(legend.position = "none") + ylab("Average Proportion (TP: n = 87, TN: n = 78)") +  
+  xlab(expression(RI[Q]~bar(x)~and~s~Adjustment)) + ylim(c(0, 1)) +
+  geom_text(aes(label = `Average Proportion`), position = position_dodge(width = 0.9), vjust = -0.25, size = 3) +
+  facet_grid(vars(Rank), vars(Type))
+
+Adjustment
+```
+
+**Figure 1: Average proportion of true positives (n = 87) and true negatives (n = 78) at ranks 1, 2, and 5.**
+
+We see definite improvement with this approach for true positives at ranks 1, 2, and 5
+with 4, 2.5, and 2-fold changes, respectively. We do not see any improvement for true
+negatives at rank 1, but we do see improvements at ranks 2 and 5 (**Fig. 1**). 
+This plot only shows general trends overall, following the adjustment of the retention
+index score to each metabolite's estimated retention index mean and standard deviation. 
+The trelliscope display (Trelli1) shows the trends per metabolite. Below, we have a single example
+of these trends. 
+
+## Single Example
+
+```{r Holdout True Positive Example}
+# Select an interesting metabolite based on the trelliscope display
+Compound <- "[PNNLMET0041] IS L-alanine d7 [7.729]"
+
+# Read sample metadata 
+SampleMetadata <- fread("../../../Data/Metadata/Sample_Metadata.csv")
+SampleMetadata$`Sample Type`[SampleMetadata$`Sample Type` == "Standard Mixture"] <- "Standard"
+
+# Get summary rank stats 
+TPRankStats <- HoldoutData %>%
+    filter(`Truth Annotation` == "True.Positive" & `Compound Name` == Compound) %>%
+    select(`Sample Name`, `Peak Index`, `Retention Index Rank`, `New RI Rank`) %>%
+    group_by(`Sample Name`, `Peak Index`) %>%
+    summarise(
+      `Min Rank Change` = min(`Retention Index Rank` - `New RI Rank`),
+      `Median Rank Change` = median(`Retention Index Rank` - `New RI Rank`),
+      `Max Rank Change` = max(`Retention Index Rank` - `New RI Rank`), .groups = "keep"
+    ) %>% 
+    ungroup() %>%
+    unique() %>%
+    merge(SampleMetadata[,1:2], by = "Sample Name") %>%
+    arrange(`Min Rank Change`) %>%
+    mutate(
+      `Sample ID` = as.numeric(factor(paste(`Sample Name`, `Peak Index`), 
+                                      levels = unique(paste(`Sample Name`, `Peak Index`))))
+    )
+  
+# Generate a specific color vector
+ColorVector <- c("CSF" = "forestgreen", 
+                 "Fungi" = "steelblue", 
+                 "Plasma" = "red",
+                 "Soil Crust" = "brown", 
+                 "Standard" = "black",
+                 "Urine" = "darkorange")
+
+# Subset color vector 
+ColorVector <- ColorVector[names(ColorVector) %in% unique(TPRankStats$`Sample Type`)]
+  
+# Set a min and max for the plot
+SimData <- HoldoutData %>% filter(`Compound Name` == Compound)
+themin <-  min(SimData$`Retention Index Rank` - SimData$`New RI Rank`)
+if (themin > 0) {themin <- -1}
+themax <- max(SimData$`Retention Index Rank` - SimData$`New RI Rank`) + 5
+if (themax < 1) {themax <- 1}
+
+# Create the base ggplot 
+TP_rep <- ggplot(TPRankStats, aes(x = `Sample ID`, y = `Median Rank Change`, color = `Sample Type`)) +
+    geom_point() + geom_segment(aes(x = `Sample ID`, xend = `Sample ID`, y = `Min Rank Change`, yend = `Max Rank Change`)) +
+    geom_hline(yintercept = 0) + theme_bw() + ylab("Original Rank - New Rank") +
+    scale_color_manual(values = ColorVector) + ylim(themin, themax) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank()) +
+     ggtitle("L-Alanine D7, True Positive") + xlab("Sample")
+
+TP_rep
+```
+
+**Figure 2: An example from the trelliscope display of the true positive rank change distribution following our normal distribution adjustment. The point is the median rank change, and the line shows the range of rank changes.**
+
+In L-Alanine D7, we see improvements in the rankings of the true positives for
+most of the samples, as a decrease in rank is desirable (**Fig. 2**). 
+Sample type may have an effect on a per metabolite 
+basis, as the trelliscope shows that fungal and soil samples often perform worse than 
+CSF, Plasma, and Urine samples with this adjustment, though the trends vary widely per metabolite. 
+
+```{r Holdout True Negative Example}
+# Get summary rank stats 
+TNRankStats <- HoldoutData %>%
+    filter(`Truth Annotation` == "True.Negative" & `Compound Name` == Compound) %>%
+    select(`Sample Name`, `Peak Index`, `Retention Index Rank`, `New RI Rank`) %>%
+    group_by(`Sample Name`, `Peak Index`) %>%
+    summarise(
+      `Min Rank Change` = min(`Retention Index Rank` - `New RI Rank`),
+      `Median Rank Change` = median(`Retention Index Rank` - `New RI Rank`),
+      `Max Rank Change` = max(`Retention Index Rank` - `New RI Rank`), .groups = "keep"
+    ) %>% 
+    ungroup() %>%
+    unique() %>%
+    merge(SampleMetadata[,1:2], by = "Sample Name") %>%
+    arrange(`Min Rank Change`) %>%
+    mutate(
+      `Sample ID` = as.numeric(factor(paste(`Sample Name`, `Peak Index`), 
+                                      levels = unique(paste(`Sample Name`, `Peak Index`))))
+    )
+  
+# Generate a specific color vector
+ColorVector <- c("CSF" = "forestgreen", 
+                 "Fungi" = "steelblue", 
+                 "Plasma" = "red",
+                 "Soil Crust" = "brown", 
+                 "Standard" = "black",
+                 "Urine" = "darkorange")
+
+# Subset color vector 
+ColorVector <- ColorVector[names(ColorVector) %in% unique(TNRankStats$`Sample Type`)]
+  
+# Set a min and max for the plot
+SimData <- HoldoutData %>% filter(`Compound Name` == Compound)
+themin <-  min(SimData$`Retention Index Rank` - SimData$`New RI Rank`)
+if (themin > 0) {themin <- -1}
+themax <- max(SimData$`Retention Index Rank` - SimData$`New RI Rank`) + 5
+if (themax < 1) {themax <- 1}
+
+# Create the base ggplot 
+TN_rep <- ggplot(TNRankStats, aes(x = `Sample ID`, y = `Median Rank Change`, color = `Sample Type`)) +
+    geom_point() + geom_segment(aes(x = `Sample ID`, xend = `Sample ID`, y = `Min Rank Change`, yend = `Max Rank Change`)) +
+    geom_hline(yintercept = 0) + theme_bw() + ylab("Original Rank - New Rank") +
+    scale_color_manual(values = ColorVector) + ylim(themin, themax) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank()) +
+     ggtitle("L-Alanine D7, True Negative") + xlab("Sample")
+
+TN_rep
+```
+
+**Figure 3: An example from the trelliscope display of the true positive rank change distribution following our normal distribution adjustment. The point is the median rank change, and the line shows the range of rank changes.**
+
+In L-Alanine D7, we see improvements in more than half of the rankings of 
+the true negatives, as an increase in rank is desirable (**Fig. 3**). 
+Most true negatives are from standard samples, with some cases of fungi and
+soil crust. There are no true negatives for the other sample types in this subset
+of selected true negatives, where each true negative must have a corresponding
+true positive in their bin. 
+
+## Rank Change
+
+```{r Rank Change}
+# Read in the verified and cleaned annotation data
+CoreMS_Files <- list.files("../../../Data/CoreMS_Identification/", full.names = T)
+
+# Pull all true positives 
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+
+# Get list of unique compounds
+Compounds <- unique(HoldoutData$`Compound Name`)
+
+# Calculate Global Values
+Globals <- Annotations %>%
+  filter(`Compound Name` %in% Compounds) %>%
+  mutate(`Retention Index Difference` = `Retention Index` - `Retention Index Ref`) %>%
+  select(c(`Compound Name`, `Retention Index Difference`)) %>%
+  group_by(`Compound Name`) %>%
+  nest() %>%
+  mutate(
+    Mean = map(data, function(x) {mean(x$`Retention Index Difference`)}) %>% unlist(),
+    SD = map(data, function(x) {sd(x$`Retention Index Difference`)}) %>% unlist(),
+    Skew = map(data, function(x) {e1071::skewness(x$`Retention Index Difference`)}) %>% unlist(),
+    N = map(data, function(x) {length(x$`Retention Index Difference`)}) %>% unlist()
+  ) %>%
+  select(-data) 
+
+TPRankings <- HoldoutData %>%
+  filter(`Truth Annotation` == "True.Positive") %>%
+  group_by(`Compound Name`) %>%
+  summarise(
+    RankChange = rankProp(`New RI Rank`, 1) - rankProp(`Retention Index Rank`, 1)
+  ) %>%
+  merge(
+    Globals, by = "Compound Name"
+  ) %>%
+  mutate(
+    `Top 1 Rank Change` = lapply(RankChange, function(x) {
+      if (x <= -0.05) {"Worse"} else if (x >= 0.05) {"Better"} else {"No Change"}
+    }) %>% unlist(),
+    `Skew Bin` = ifelse(abs(Skew) >= 1, "| Skew | >= 1", "| Skew | < 1")
+  )
+  
+SumStatsRelation <- ggplot(TPRankings, aes(x = abs(Mean), y = SD, color = `Top 1 Rank Change`)) + geom_point() +
+  theme_bw() + ylab(expression(RI[Q]~s)) + xlab(expression("|"~RI[Q]~bar(x)~"|")) +
+  scale_color_manual(values = list("Worse" = "salmon2", "No Change" = "gray", "Better" = "springgreen4")) +
+  theme(legend.position = "bottom") + facet_wrap(.~`Skew Bin`)
+
+SumStatsRelation
+```
+
+**Figure 4: True positive retention index difference (query minus reference) standard deviations plotted against absolute means and separate by skews less than or greater than 1. Points are colored by rank change improvements at rank 1, where better >= 0.05, worse is <= -0.05, and the rest are labeled no change.**
+
+There is no obvious trend between improvement at rank 1 and query retention index 
+statistics (mean, standard deviation, and skew) (**Fig. 4**). This means that 
+our three summary statistics alone do not fully describe what makes a good rank
+change. That said, adjusting the score with higher means and standard deviations 
+generally results in no change or better scores. 
+
+
+```{r Rank Change Summary}
+SumStatsBar <- TPRankings$`Top 1 Rank Change` %>%
+  table(dnn = "Top 1 Rank Change") %>%
+  data.table() %>%
+  ggplot(aes(x = `Top 1 Rank Change`, fill = `Top 1 Rank Change`, y = N)) + 
+  geom_bar(stat = "identity") + theme_bw() + ylab("Total") + 
+  geom_text(aes(label = N), position = position_dodge(width = 0.9), vjust = -0.25) +
+  scale_fill_manual(values = list("Worse" = "salmon2", "No Change" = "gray", "Better" = "springgreen4")) +
+  theme(legend.position = "none") 
+
+SumStatsBar
+```
+
+**Figure 5: Counts of changes at rank 1 using this adjustment, where better >= 0.05, worse is <= -0.05, and the rest are labeled no change.**
+
+With this approach, 55% of our 87 metabolite subset have better rankings, 36% experience no change,
+and 9% have worse rankings (**Fig. 5**). Next, we will try using the normal distribution
+probabilities instead of the kernel as the RI score. See the next markdown for more details. 
+
+# Publication Figure
+
+```{r Publication Figure}
+(Adjustment + ((TP_rep | TN_rep) / (SumStatsRelation + SumStatsBar + plot_layout(widths = c(3,1)))) + 
+  plot_layout(widths = c(1,3))) + plot_annotation(tag_levels = "A")
+```
+
+
+
+
+
