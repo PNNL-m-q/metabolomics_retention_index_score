@@ -1,7 +1,7 @@
 ---
 title: "Retention Index Distribution Probability Adjustment"
 author: "Degnan, David J. & Bramer, Lisa M. & Flores, Javier E."
-date: "Last updated: 09/23/2022"
+date: "Last updated: 10/17/2022"
 output:
   BiocStyle::html_document:
     toc_float: true
@@ -70,10 +70,13 @@ param_fit <- lapply(Compounds, function(cmpd) {
   
   # Return a list of fitted parameters 
   suppressWarnings({list(
-    "Normal" = tryCatch({fitdistr(distr, "normal")}, error = function(e) {return(NA)}),
-    "Log Normal" = tryCatch({fitdistr(distr, "lognormal")}, error = function(e) {return(NA)}),
-    "Logistic" = tryCatch({fitdistr(distr, "logistic")}, error = function(e) {return(NA)}),
-    "Gamma" = tryCatch({fitdistr(distr, "gamma")}, error = function(e) {return(NA)}),
+    "Normal" = fitdistr(distr, "normal"),
+    "Log Normal" = fitdistr(distr, "lognormal"),
+    "Logistic" = tryCatch({fitdistr(distr, "logistic")}, error = function(e) {
+      list("estimate" = c("location" = mean(distr), "scale" = sqrt((3*var(distr))/(pi^2))),
+           "sd" = c("location" = NA, "scale" = NA))
+    }),
+    "Gamma" = fitdistr(distr, "gamma"),
     "Original" = Anno30[Anno30$`Compound Name` == cmpd, "Retention Index Ref"] %>% unlist() %>% head(1),
     "Distribution" = distr
   )})
@@ -147,7 +150,7 @@ ParamFit <- param_estimates %>%
       rename(Metric = name, SD = value),
     by = c("Compound", "Metric")
   ) %>%
-  mutate(Poor = is.nan(`SD`),
+  mutate(Poor = is.nan(`SD`) | is.na(`SD`),
          Metric = factor(Metric, levels = colnames(param_estimates)))
 
 # Add the original score

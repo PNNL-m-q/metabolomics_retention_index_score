@@ -1,0 +1,49 @@
+---
+title: "Retention Index Minimum N Suggestion"
+author: "Degnan, David J. & Bramer, Lisa M. & Flores, Javier E."
+date: "Last updated: 10/17/2022"
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+    lib_dir: trelli
+---
+
+```{r Setup, include=FALSE}
+path <- "~/Git_Repos/metabolomics_retention_index_score/Markdowns/5-Retention-Index-Minimum-N-Suggestion/"
+```
+
+```{r}
+# Pull all true positives 
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+
+# Subset to N > 30
+MetaboliteCount <- table(Annotations$`Compound Name`, dnn = c("Compound.Name")) %>%
+  data.frame() 
+Anno30 <- Annotations[Annotations$`Compound Name` %in% 
+                      MetaboliteCount[MetaboliteCount$Freq >= 30, "Compound.Name"],] %>%
+  filter(`Compound Name` != "[PNNLMET0040] Impurity 001 [12.148]")
+Compounds <- unique(Anno30$`Compound Name`)
+```
+
+# Parameter Estimate Stability 
+
+The final analysis is to suggest "how many (n) samples are needed to accurately estimate
+the retention index?" 
+
+## Normal 
+
+### Mean
+
+#### Standard Deviation
+
+
+
+
+
+
+
+
+
+
+
