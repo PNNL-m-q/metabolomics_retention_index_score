@@ -11,6 +11,12 @@ output:
 
 ```{r Setup, include=FALSE}
 path <- "~/Git_Repos/metabolomics_retention_index_score/Markdowns/5-Retention-Index-Minimum-N-Suggestion/"
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(rootdir = path)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(patchwork)
 ```
 
 ```{r}
@@ -31,11 +37,78 @@ Compounds <- unique(Anno30$`Compound Name`)
 The final analysis is to suggest "how many (n) samples are needed to accurately estimate
 the retention index?" 
 
-## Normal 
+```{r}
+# Define a function to determine fits for a holdout
+min_num_test <- function(univariate_dist) {
+  
+  do.call(bind_rows, lapply(Compounds, function(comp) {
+    
+    comp <- Compounds[1]
+    vals <- Anno30[Anno30$`Compound Name` == comp, "Retention Index"] %>% unlist()
+    
+    do.call(bind_rows, lapply(10:30, function(x) {
+      
+      # Sample values of the requested size
+      takeSample <- sample(vals, x)
+      
+      # Make an estimation of the distribution
+      theFit <- tryCatch({fitdistr(takeSample, univariate_dist, lower = c(0,0))}, error = function(e) {
+        if (univariate_dist == "gamma") {list("sd" = c("shape" = NA, "rate" = NA))} else
+        if (univariate_dist == "logistic") {list("sd" = c("location" = NA, "scale" = NA))}
+      })
+      
+      return(c("Compound" = comp, 
+               "N" = x,
+               "SE" = theFit$sd[1],
+               "SE" = theFit$sd[2]))
+      
+    }))
+    
+  }))
+  
+}
 
-### Mean
+set.seed(460)
 
-#### Standard Deviation
+min_num_norm <- min_num_test("normal")
+min_num_lnorm <- min_num_test("lognormal")
+min_num_logis <- min_num_test("logistic")
+min_num_gamma <- min_num_test("gamma")
+
+# Define plotting function
+plot_min_num <- function(plotDF, title, yl = FALSE, xl = FALSE) {
+  basePlot <- plotDF %>%
+    group_by(N) %>%
+    summarise(
+      "Median SE" = median(as.numeric(var), na.rm = T),
+      "SD SE" = sd(as.numeric(var), na.rm = T)
+    ) %>%
+    ggplot(aes(x = as.numeric(N), y = `Median SE`)) + geom_point() + 
+    geom_segment(aes(x = as.numeric(N), y = `Median SE` - `SD SE`, 
+                     xend = as.numeric(N), yend = `Median SE` + `SD SE`)) +
+    ggtitle(title) + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + ylab("") + xlab("")
+  
+  if (yl) {basePlot <- basePlot + ylab("Median SE +/- 1 SD")} 
+  if (xl) {basePlot <- basePlot + xlab("N")}
+  
+  return(basePlot)
+}
+
+library(patchwork)
+
+(plot_min_num(min_num_norm %>% dplyr::select(-SE.sd) %>% rename(var = SE.mean), "Normal: mean", T) + ylim(c(0,2.2)) +
+  plot_min_num(min_num_norm %>% dplyr::select(-SE.mean) %>% rename(var = SE.sd), "Normal: standard deviation") + ylim(c(0,2.2))) /
+(plot_min_num(min_num_logis %>% dplyr::select(-SE.scale) %>% rename(var = SE.location), "Logistic: location", T) + ylim(c(0,2.2)) +
+  plot_min_num(min_num_logis %>% dplyr::select(-SE.location) %>% rename(var = SE.scale), "Logistic: scale") + ylim(c(0,2.2))) /
+(plot_min_num(min_num_lnorm %>% dplyr::select(-SE.sdlog) %>% rename(var = SE.meanlog), "Log Normal: log mean", T) + ylim(0, 0.0022) +
+  plot_min_num(min_num_lnorm %>% dplyr::select(-SE.meanlog) %>% rename(var = SE.sdlog), "Log Normal: log standard deviation") + ylim(0, 0.0022)) /
+(plot_min_num(min_num_gamma %>% dplyr::select(-SE.rate) %>% rename(var = SE.shape), "Gamma: shape", T, T) +
+   plot_min_num(min_num_gamma %>% dplyr::select(-SE.shape) %>% rename(var = SE.rate), "Gamma: rate", F, T)) +
+  plot_annotation(tag_levels = "A")
+
+```
+
+
 
 
 
