@@ -17,6 +17,7 @@ library(dplyr)
 library(data.table)
 library(ggplot2)
 library(patchwork)
+library(MASS)
 ```
 
 ```{r}
@@ -38,29 +39,43 @@ The final analysis is to suggest "how many (n) samples are needed to accurately 
 the retention index?" 
 
 ```{r}
+# To ensure parameters are estimated on the same drawn distributions, draw values first
+drawn_data <- lapply(Compounds, function(comp) {
+  vals <- Anno30[Anno30$`Compound Name` == comp, "Retention Index"] %>% unlist()
+  lapply(10:30, function(x) {
+    sample(vals, x)
+  })
+})
+
 # Define a function to determine fits for a holdout
 min_num_test <- function(univariate_dist) {
   
-  do.call(bind_rows, lapply(Compounds, function(comp) {
+  do.call(bind_rows, lapply(1:length(drawn_data), function(entry) {
     
-    comp <- Compounds[1]
-    vals <- Anno30[Anno30$`Compound Name` == comp, "Retention Index"] %>% unlist()
+    comp <- Compounds[entry]
+    unwrapped <- drawn_data[[entry]]
     
-    do.call(bind_rows, lapply(10:30, function(x) {
+    do.call(bind_rows, lapply(1:length(unwrapped), function(x) {
+      
+      theN <- x + 9
       
       # Sample values of the requested size
-      takeSample <- sample(vals, x)
+      takeSample <- unwrapped[[x]]
       
       # Make an estimation of the distribution
       theFit <- tryCatch({fitdistr(takeSample, univariate_dist, lower = c(0,0))}, error = function(e) {
-        if (univariate_dist == "gamma") {list("sd" = c("shape" = NA, "rate" = NA))} else
-        if (univariate_dist == "logistic") {list("sd" = c("location" = NA, "scale" = NA))}
+        if (univariate_dist == "gamma") {list("estimate" = c("shape" = NA, rate = NA), "sd" = c("shape" = NA, "rate" = NA))} else
+        if (univariate_dist == "logistic") {list("estimate" = c("location" = NA, "scale" = NA), "sd" = c("location" = NA, "scale" = NA))}
       })
       
       return(c("Compound" = comp, 
-               "N" = x,
+               "N" = theN,
                "SE" = theFit$sd[1],
-               "SE" = theFit$sd[2]))
+               "SE" = theFit$sd[2],
+               "Param" = theFit$estimate[1],
+               "Param" = theFit$estimate[2],
+               "Test1" = theFit$sd[1] >= theFit$estimate[1],
+               "Test2" =  theFit$sd[2] >= theFit$estimate[2]))
       
     }))
     
@@ -68,7 +83,7 @@ min_num_test <- function(univariate_dist) {
   
 }
 
-set.seed(460)
+set.seed(340)
 
 min_num_norm <- min_num_test("normal")
 min_num_lnorm <- min_num_test("lognormal")
@@ -80,33 +95,40 @@ plot_min_num <- function(plotDF, title, yl = FALSE, xl = FALSE) {
   basePlot <- plotDF %>%
     group_by(N) %>%
     summarise(
-      "Median SE" = median(as.numeric(var), na.rm = T),
+      "Mean SE" = mean(as.numeric(var), na.rm = T),
       "SD SE" = sd(as.numeric(var), na.rm = T)
     ) %>%
-    ggplot(aes(x = as.numeric(N), y = `Median SE`)) + geom_point() + 
-    geom_segment(aes(x = as.numeric(N), y = `Median SE` - `SD SE`, 
-                     xend = as.numeric(N), yend = `Median SE` + `SD SE`)) +
+    ggplot(aes(x = as.numeric(N), y = `Mean SE`)) + geom_point() + 
+    geom_segment(aes(x = as.numeric(N), y = `Mean SE` - `SD SE`, 
+                     xend = as.numeric(N), yend = `Mean SE` + `SD SE`)) +
     ggtitle(title) + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + ylab("") + xlab("")
   
-  if (yl) {basePlot <- basePlot + ylab("Median SE +/- 1 SD")} 
+  if (yl) {basePlot <- basePlot + ylab("Mean SE +/- 1 SD")} 
   if (xl) {basePlot <- basePlot + xlab("N")}
   
   return(basePlot)
 }
 
-library(patchwork)
-
-(plot_min_num(min_num_norm %>% dplyr::select(-SE.sd) %>% rename(var = SE.mean), "Normal: mean", T) + ylim(c(0,2.2)) +
-  plot_min_num(min_num_norm %>% dplyr::select(-SE.mean) %>% rename(var = SE.sd), "Normal: standard deviation") + ylim(c(0,2.2))) /
-(plot_min_num(min_num_logis %>% dplyr::select(-SE.scale) %>% rename(var = SE.location), "Logistic: location", T) + ylim(c(0,2.2)) +
-  plot_min_num(min_num_logis %>% dplyr::select(-SE.location) %>% rename(var = SE.scale), "Logistic: scale") + ylim(c(0,2.2))) /
-(plot_min_num(min_num_lnorm %>% dplyr::select(-SE.sdlog) %>% rename(var = SE.meanlog), "Log Normal: log mean", T) + ylim(0, 0.0022) +
-  plot_min_num(min_num_lnorm %>% dplyr::select(-SE.meanlog) %>% rename(var = SE.sdlog), "Log Normal: log standard deviation") + ylim(0, 0.0022)) /
+(plot_min_num(min_num_norm %>% dplyr::select(-SE.sd) %>% rename(var = SE.mean), "Normal: mean", T) + 
+  plot_min_num(min_num_norm %>% dplyr::select(-SE.mean) %>% rename(var = SE.sd), "Normal: standard deviation")) /
+(plot_min_num(min_num_logis %>% dplyr::select(-SE.scale) %>% rename(var = SE.location), "Logistic: location", T)  +
+  plot_min_num(min_num_logis %>% dplyr::select(-SE.location) %>% rename(var = SE.scale), "Logistic: scale")) /
+(plot_min_num(min_num_lnorm %>% dplyr::select(-SE.sdlog) %>% rename(var = SE.meanlog), "Log Normal: log mean", T) +
+  plot_min_num(min_num_lnorm %>% dplyr::select(-SE.meanlog) %>% rename(var = SE.sdlog), "Log Normal: log standard deviation")) /
 (plot_min_num(min_num_gamma %>% dplyr::select(-SE.rate) %>% rename(var = SE.shape), "Gamma: shape", T, T) +
    plot_min_num(min_num_gamma %>% dplyr::select(-SE.shape) %>% rename(var = SE.rate), "Gamma: rate", F, T)) +
   plot_annotation(tag_levels = "A")
-
 ```
+
+```{r}
+lapply(1:87, function(x) {
+  min_num_norm %>%
+    filter(Compound == Compounds[x]) %>%
+    ggplot(aes(x = as.numeric(N), y = as.numeric(SE.mean))) + geom_line() +
+    ggtitle(Compounds[x])
+})
+```
+
 
 
 
