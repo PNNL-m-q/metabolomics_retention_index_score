@@ -33,101 +33,53 @@ Anno30 <- Annotations[Annotations$`Compound Name` %in%
 Compounds <- unique(Anno30$`Compound Name`)
 ```
 
+```{r}
+# Pull results of minimum N analysis
+MinN <- do.call(rbind, lapply(list.files("../../RI_Specific_Data/Minimum_N_Analysis", full.names = T), function(x) {
+  fread(x)
+}))
+```
+
 # Parameter Estimate Stability 
 
 The final analysis is to suggest "how many (n) samples are needed to accurately estimate
 the retention index?" 
 
 ```{r}
-# To ensure parameters are estimated on the same drawn distributions, draw values first
-drawn_data <- lapply(Compounds, function(comp) {
-  vals <- Anno30[Anno30$`Compound Name` == comp, "Retention Index"] %>% unlist()
-  lapply(10:30, function(x) {
-    sample(vals, x)
-  })
-})
-
-# Define a function to determine fits for a holdout
-min_num_test <- function(univariate_dist) {
-  
-  do.call(bind_rows, lapply(1:length(drawn_data), function(entry) {
-    
-    comp <- Compounds[entry]
-    unwrapped <- drawn_data[[entry]]
-    
-    do.call(bind_rows, lapply(1:length(unwrapped), function(x) {
-      
-      theN <- x + 9
-      
-      # Sample values of the requested size
-      takeSample <- unwrapped[[x]]
-      
-      # Make an estimation of the distribution
-      theFit <- tryCatch({fitdistr(takeSample, univariate_dist, lower = c(0,0))}, error = function(e) {
-        if (univariate_dist == "gamma") {list("estimate" = c("shape" = NA, rate = NA), "sd" = c("shape" = NA, "rate" = NA))} else
-        if (univariate_dist == "logistic") {list("estimate" = c("location" = NA, "scale" = NA), "sd" = c("location" = NA, "scale" = NA))}
-      })
-      
-      return(c("Compound" = comp, 
-               "N" = theN,
-               "SE" = theFit$sd[1],
-               "SE" = theFit$sd[2],
-               "Param" = theFit$estimate[1],
-               "Param" = theFit$estimate[2],
-               "Test1" = theFit$sd[1] >= theFit$estimate[1],
-               "Test2" =  theFit$sd[2] >= theFit$estimate[2]))
-      
-    }))
-    
-  }))
-  
-}
-
-set.seed(340)
-
-min_num_norm <- min_num_test("normal")
-min_num_lnorm <- min_num_test("lognormal")
-min_num_logis <- min_num_test("logistic")
-min_num_gamma <- min_num_test("gamma")
-
 # Define plotting function
 plot_min_num <- function(plotDF, title, yl = FALSE, xl = FALSE) {
   basePlot <- plotDF %>%
-    group_by(N) %>%
-    summarise(
-      "Mean SE" = mean(as.numeric(var), na.rm = T),
-      "SD SE" = sd(as.numeric(var), na.rm = T)
-    ) %>%
-    ggplot(aes(x = as.numeric(N), y = `Mean SE`)) + geom_point() + 
-    geom_segment(aes(x = as.numeric(N), y = `Mean SE` - `SD SE`, 
-                     xend = as.numeric(N), yend = `Mean SE` + `SD SE`)) +
+    group_by(Compound, N) %>%
+    summarise(MaxSE = max(var, na.rm = T)) %>%
+    ggplot(aes(group = N, x = N, y = MaxSE)) + geom_boxplot() + 
     ggtitle(title) + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + ylab("") + xlab("")
   
-  if (yl) {basePlot <- basePlot + ylab("Mean SE +/- 1 SD")} 
+  if (yl) {basePlot <- basePlot + ylab("Maximum SE per Metabolite")} 
   if (xl) {basePlot <- basePlot + xlab("N")}
   
   return(basePlot)
 }
 
-(plot_min_num(min_num_norm %>% dplyr::select(-SE.sd) %>% rename(var = SE.mean), "Normal: mean", T) + 
-  plot_min_num(min_num_norm %>% dplyr::select(-SE.mean) %>% rename(var = SE.sd), "Normal: standard deviation")) /
-(plot_min_num(min_num_logis %>% dplyr::select(-SE.scale) %>% rename(var = SE.location), "Logistic: location", T)  +
-  plot_min_num(min_num_logis %>% dplyr::select(-SE.location) %>% rename(var = SE.scale), "Logistic: scale")) /
-(plot_min_num(min_num_lnorm %>% dplyr::select(-SE.sdlog) %>% rename(var = SE.meanlog), "Log Normal: log mean", T) +
-  plot_min_num(min_num_lnorm %>% dplyr::select(-SE.meanlog) %>% rename(var = SE.sdlog), "Log Normal: log standard deviation")) /
-(plot_min_num(min_num_gamma %>% dplyr::select(-SE.rate) %>% rename(var = SE.shape), "Gamma: shape", T, T) +
-   plot_min_num(min_num_gamma %>% dplyr::select(-SE.shape) %>% rename(var = SE.rate), "Gamma: rate", F, T)) +
+(plot_min_num(MinN %>% dplyr::select(N, Normal.Mean.SE, Compound) %>% 
+                rename(var = Normal.Mean.SE), "Normal: mean",  T) + 
+  plot_min_num(MinN %>% dplyr::select(N, Normal.SD.SE, Compound) %>% 
+                rename(var = Normal.SD.SE), "Normal: standard deviation", )) /
+(plot_min_num(MinN %>% dplyr::select(N, Logistic.Location.SE, Compound) %>%
+                rename(var = Logistic.Location.SE), "Logistic: location", T)  +
+  plot_min_num(MinN %>% dplyr::select(N, Logistic.Scale.SE, Compound) %>% 
+                rename(var = Logistic.Scale.SE), "Logistic: scale", )) /
+(plot_min_num(MinN %>% dplyr::select(N, LogNormal.LogMean.SE, Compound) %>% 
+                rename(var = LogNormal.LogMean.SE), "Log Normal: log mean", T) +
+  plot_min_num(MinN %>% dplyr::select(N, LogNormal.LogSD.SE, Compound) %>%
+                rename(var = LogNormal.LogSD.SE), "Log Normal: log standard deviation")) /
+(plot_min_num(MinN %>% dplyr::select(N, Gamma.Shape.SE, Compound) %>% 
+                rename(var = Gamma.Shape.SE), "Gamma: shape",  T, T) +
+   plot_min_num(MinN %>% dplyr::select(N, Gamma.Rate.SE, Compound) %>% 
+                rename(var = Gamma.Rate.SE), "Gamma: rate",  F, T)) +
   plot_annotation(tag_levels = "A")
 ```
 
-```{r}
-lapply(1:87, function(x) {
-  min_num_norm %>%
-    filter(Compound == Compounds[x]) %>%
-    ggplot(aes(x = as.numeric(N), y = as.numeric(SE.mean))) + geom_line() +
-    ggtitle(Compounds[x])
-})
-```
+
 
 
 

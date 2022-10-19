@@ -26,7 +26,7 @@ for (metab in Compounds) {
   # Pull the distribution
   dist <- Anno30[Anno30$`Compound Name` == metab, "Retention Index"] %>% unlist()
   
-  results <- foreach(n = 10:30, .combine = rbind) %dopar% {
+  results <- foreach(n = 3:30, .combine = rbind) %dopar% {
     
     repeats <- foreach(iteration = 1:100, .combine = rbind) %dopar% {
     
