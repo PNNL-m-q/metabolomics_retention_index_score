@@ -1,7 +1,7 @@
 ---
 title: "Retention Index Distribution Probability Adjustment"
 author: "Degnan, David J. & Bramer, Lisa M. & Flores, Javier E."
-date: "Last updated: 10/17/2022"
+date: "Last updated: 10/20/2022"
 output:
   BiocStyle::html_document:
     toc_float: true
@@ -16,6 +16,7 @@ knitr::opts_knit$set(rootdir = path)
 #setwd(path)
 library(dplyr); library(data.table); library(ggplot2); library(patchwork)
 library(tidyr); library(purrr); library(MASS); library(e1071)
+library(forcats); library(parallel); library(doParallel)
 ```
 
 ```{r Load Data}
@@ -63,7 +64,9 @@ cleanNames <- function(x) {
 set.seed(450)
 
 # Calculate gamma fits with fitdistrPlus, which fails on normal, log normal, and logistic
-param_fit <- lapply(Compounds, function(cmpd) {
+registerDoParallel(detectCores())
+
+param_fit <- foreach(cmpd = Compounds) %dopar% {
   
   # Get retention index differences for continuous distributions
   distr <- (Anno30[Anno30$`Compound Name` == cmpd, "Retention Index"]) %>% unlist()
@@ -72,16 +75,13 @@ param_fit <- lapply(Compounds, function(cmpd) {
   suppressWarnings({list(
     "Normal" = fitdistr(distr, "normal"),
     "Log Normal" = fitdistr(distr, "lognormal"),
-    "Logistic" = tryCatch({fitdistr(distr, "logistic")}, error = function(e) {
-      list("estimate" = c("location" = mean(distr), "scale" = sqrt((3*var(distr))/(pi^2))),
-           "sd" = c("location" = NA, "scale" = NA))
-    }),
+    "Logistic" = tryCatch({fitdistr(distr, "logistic")}, error = function(e) {return(NA)}),
     "Gamma" = fitdistr(distr, "gamma"),
     "Original" = Anno30[Anno30$`Compound Name` == cmpd, "Retention Index Ref"] %>% unlist() %>% head(1),
     "Distribution" = distr
   )})
   
-})
+}
 names(param_fit) <- lapply(Compounds, cleanNames) %>% unlist()
 ```
 
@@ -413,6 +413,15 @@ normal may be an appropriate estimation more often than is suggested by the
 KS statistic. The most interesting find of the AIC statistic, is that logistic fit
 is rarely far removed from being the best fit. 
 
+```{r}
+AIC_Format %>%
+  filter(`Scaled AIC Bin` == "[0,2]") %>%
+  ungroup() %>%
+  dplyr::select(Distribution) %>%
+  unlist() %>%
+  table(dnn = "Distribution")
+```
+
 # Rank Changes
 
 ```{r}
@@ -681,7 +690,7 @@ TN_Rank5 <- Ranks %>%
   dplyr::select(`Compound Name`, Proportion, Score) %>% 
   mutate(Score = ifelse(Score != "Original", "Other", "Original")) %>% 
   group_by(`Compound Name`) %>% 
-  filter(Proportion == max(Proportion)) %>% 
+  filter(Proportion == min(Proportion)) %>% 
   filter(n() == 1)
 
 Annotations <- fread("~/Downloads/AnnoTP.txt")
@@ -733,6 +742,37 @@ rank_explain
 
 More extreme means and sd and less extreme skew perform better with other scores 
 than the original RI score (**Fig. 7**).
+
+```{r}
+TP_Rank1 <- Ranks %>% 
+  filter(Truth == "True Positive" & Rank == 1) %>% 
+  dplyr::select(`Compound Name`, Proportion, Score) %>% 
+  mutate(Score = ifelse(Score != "Original", "Other", "Original")) %>% 
+  group_by(`Compound Name`) %>% 
+  filter(Proportion == max(Proportion)) %>% 
+  filter(n() == 1)
+
+
+TN_Rank1 <- Ranks %>% 
+  filter(Truth == "True Negative" & Rank == 1) %>% 
+  dplyr::select(`Compound Name`, Proportion, Score) %>% 
+  mutate(Score = ifelse(Score != "Original", "Other", "Original")) %>% 
+  group_by(`Compound Name`) %>% 
+  filter(Proportion == min(Proportion)) %>% 
+  filter(n() == 1)
+
+# Make table
+data.table(
+  Truth = c(rep("True Positive", 2), rep("True Negative", 2)),
+  Rank = c(1,5,1,5),
+  Original = c(sum(TP_Rank1$Score == "Original"), sum(TP_Rank5$Score == "Original"),
+               sum(TN_Rank1$Score == "Original"), sum(TN_Rank5$Score == "Original")),
+  Other = c(sum(TP_Rank1$Score == "Other"), sum(TP_Rank5$Score == "Other"),
+            sum(TN_Rank1$Score == "Other"), sum(TN_Rank5$Score == "Other")),
+  `All 0` = c(8, 1, 62, 41)
+) %>%
+  mutate(Ties = 87 - Original - Other - `All 0`)
+```
 
 ```{r}
 numAtt <- 10000
@@ -966,6 +1006,4 @@ make_dens_plot <- function(metab, metab_name, legend = FALSE) {
 make_dens_plot("L-glutamic acid [major]", "L-glutamic acid") |
   make_dens_plot("[1198] isocitric acid [16.847]", "isocitric acid", T) 
 ```
-
-
 

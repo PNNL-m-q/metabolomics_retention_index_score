@@ -79,6 +79,28 @@ plot_min_num <- function(plotDF, title, yl = FALSE, xl = FALSE) {
   plot_annotation(tag_levels = "A")
 ```
 
+```{r}
+data.table(
+  "Parameter" = factor(c(rep("Normal: mean", nrow(MinN)), rep("Normal: standard deviation", nrow(MinN)),
+                 rep("Logistic: location", nrow(MinN)), rep("Logistic: scale", nrow(MinN)),
+                 rep("Log Normal: log mean", nrow(MinN)), rep("Log Normal: log standard deviation", nrow(MinN)),
+                 rep("Gamma: shape", nrow(MinN)), rep("Gamma: rate", nrow(MinN))),
+                 levels = c("Normal: mean", "Normal: standard deviation", "Logistic: location",
+                            "Logistic: scale", "Log Normal: log mean", 
+                            "Log Normal: log standard deviation", "Gamma: shape", "Gamma: rate")),
+  "N" = rep(MinN$N, 8),
+  "Standard Error / Estimate" = c(MinN$Normal.Mean.SE / MinN$Normal.Mean.Est,
+                         MinN$Normal.SD.SE / MinN$Normal.SD.Est,
+                         MinN$LogNormal.LogMean.SE / MinN$LogNormal.LogMean.Est,
+                         MinN$LogNormal.LogSD.SE / MinN$LogNormal.LogSD.Est,
+                         MinN$Logistic.Location.SE / MinN$Logistic.Location.Est,
+                         MinN$Logistic.Scale.SE / MinN$Logistic.Scale.Est,
+                         MinN$Gamma.Shape.SE / MinN$Gamma.Shape.Est,
+                         MinN$Gamma.Rate.SE / MinN$Gamma.Rate.Est)
+) %>%
+  ggplot(aes(group = N, x= N, y = `Standard Error / Estimate`)) + geom_boxplot() + theme_bw() +
+  facet_wrap(.~Parameter, ncol = 2, scales = "free")
+```
 
 
 
