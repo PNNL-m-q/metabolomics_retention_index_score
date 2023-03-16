@@ -60,7 +60,7 @@ CoreMS_Files <- list.files("../../../Data/CoreMS_Identification/", full.names = 
 Annotations <- fread("~/Downloads/AnnoTP.txt")
 
 # Read in the sample metadata 
-SampleMetadata <- fread("../../../Data/Metadata/Sample_Metadata.csv")
+SampleMetadata <- fread("../../Metadata/Sample_Metadata.csv")
 SampleMetadata$`Sample Type`[SampleMetadata$`Sample Type` == "Standard Mixture"] <- "Standard"
 
 # Make a permanent sample coloring scheme
@@ -93,9 +93,9 @@ Anno30 <- merge(Anno30, SampleMetadata, by = "Sample Name")
 
 # Create boxplot of data per sample and metabolite
 SampleType <- Annotations %>% 
-  select(`Sample Type`, `Sample Name`) %>% 
+  dplyr::select(`Sample Type`, `Sample Name`) %>% 
   unique() %>% 
-  select(`Sample Type`) %>% 
+  dplyr::select(`Sample Type`) %>% 
   mutate(`Sample Type` = ifelse(`Sample Type` == "Standard Mixture", "Standard", `Sample Type`)) %>%
   table(dnn = "Sample Type") %>% 
   data.frame() %>%   
@@ -103,11 +103,11 @@ SampleType <- Annotations %>%
   arrange(desc(Freq)) %>%
   rename(`# Samples` = Freq) %>%
   mutate(`# Metabolites` = Annotations %>% 
-           select(`Sample Type`) %>% 
+           dplyr::select(`Sample Type`) %>% 
            mutate(`Sample Type` = ifelse(`Sample Type` == "Standard Mixture", "Standard", `Sample Type`)) %>%
            table() %>% 
            data.frame() %>%
-           select(Freq) %>%
+           dplyr::select(Freq) %>%
            unlist(),
          Rate = (`# Metabolites` / `# Samples`) %>% round(2)
   )
@@ -134,7 +134,7 @@ as follows:
 
 ```{r True Positive Rate}
 Annotations %>%
-  select(c(`Sample Name`, `Sample Type`)) %>%
+  dplyr::select(c(`Sample Name`, `Sample Type`)) %>%
   group_by(`Sample Type`) %>%
   summarise(
     Count = length(unique(`Sample Name`)),
@@ -143,7 +143,7 @@ Annotations %>%
   mutate(
     `True Positive Rate` = round(Total / Count, 4)
   ) %>%
-  select(-c(Count, Total)) %>%
+  dplyr::select(-c(Count, Total)) %>%
   arrange(-`True Positive Rate`)
 ```
 

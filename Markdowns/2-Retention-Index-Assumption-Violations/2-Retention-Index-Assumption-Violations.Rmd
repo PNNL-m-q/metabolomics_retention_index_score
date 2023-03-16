@@ -392,6 +392,12 @@ To simulate the effect of violating multiple assumption at once, a gamma
 0.5 units of their target value (**Fig. 10**). See the ri_score_multiple_violations
 script for specifics on how this was accomplished. 
 
+```{r}
+mean(abs(Multiple_Viol$Mean_Sim - Multiple_Viol$Mean))
+mean(abs(Multiple_Viol$SD_Sim - Multiple_Viol$SD))
+mean(abs(Multiple_Viol$Skew_Sim - Multiple_Viol$Skew))
+```
+
 ```{r Multiple Violations}
 combo <- Multiple_Viol %>%
   mutate(Skew = factor(paste0("Skew = ", Skew), levels = c("Skew = -5", "Skew = -4",
