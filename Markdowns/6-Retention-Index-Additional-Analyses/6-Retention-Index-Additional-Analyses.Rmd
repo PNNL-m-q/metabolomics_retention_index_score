@@ -1,0 +1,95 @@
+---
+title: "Retention Index Additional Analyses"
+author: "Degnan, David J. & Bramer, Lisa M. & Flores, Javier E."
+date: "Last updated: 03/16/2023"
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+    lib_dir: trelli
+---
+
+```{r Setup, include=FALSE}
+path <- "~/Git_Repos/metabolomics_retention_index_score/Markdowns/6-Retention-Index-Additional-Analyses/"
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(rootdir = path)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(patchwork)
+library(e1071)
+```
+
+```{r Load Data}
+# Load all CoreMS data 
+CoreMS_Files <- list.files("/Users/degn400/Library/Group Containers/UBF8T346G9.OneDriveStandaloneSuite/OneDrive - PNNL.noindex/OneDrive - PNNL/Desktop/MQ/MQ_Data/Final_Dataset/SUM", full.names = T)
+
+# Read in annotations
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+
+# Subset to N > 30
+MetaboliteCount <- table(Annotations$`Compound Name`, dnn = c("Compound.Name")) %>%
+  data.frame() 
+Anno30 <- Annotations[Annotations$`Compound Name` %in% 
+                      MetaboliteCount[MetaboliteCount$Freq >= 30, "Compound.Name"],] %>%
+  filter(`Compound Name` != "[PNNLMET0040] Impurity 001 [12.148]")
+Compounds <- unique(Anno30$`Compound Name`)
+
+# Pull FAMEs
+FAMEs <- fread("../../RI_Specific_Data/FAMES.csv")
+
+# Pull metadata
+Metadata <- fread("../../Metadata/Sample_Metadata.csv")
+Metadata$Time <- as.Date(Metadata$Time, "%m/%d/%y")
+Metadata <- Metadata %>% arrange(Time)
+
+# Add skew information
+Skews <- Anno30 %>%
+  dplyr::select(`Compound Name`, `Retention Index`) %>%
+  group_by(`Compound Name`) %>%
+  summarise(Skew = abs(skewness(`Retention Index`)))
+
+
+```
+
+```{r}
+# Add FAMEs file for each group
+
+
+```
+
+
+## Are non-normal distributions far from FAMES?
+
+```{r}
+Anno30 %>%
+  dplyr::select(`Compound Name`, `Retention Time`) %>%
+  merge(Skews, by = "Compound Name") %>%
+  ggplot(aes(x = `Retention Time`, y = Skew)) + geom_point()
+```
+
+
+## How are retention indices selected? 
+
+```{r}
+Example <- fread("~/Downloads/Group 2_Standards.csv")
+
+Example %>%
+  filter(`Sample name` == "GCMS_FAMEs_01_GCMS02_20200303" & grepl("C8|C9|C10|C12|C14|C16|C18|C20|C22|C24|C26|C28", `Compound Name`)) %>%
+  dplyr::select(`Compound Name`, `Retention Time`, `Retention index`, `Retention index Ref`)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
