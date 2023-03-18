@@ -1,0 +1,43 @@
+Sample Name	Peak Index	Retention Time	Retention Time Ref	Retention Index	Retention Index Ref	Compound Name
+GCMS_FAMEs_01_GCMS02_20180816	23	8.60746666666667	9.248	900	900	[C9] Methyl Pelargonate [9.248]
+GCMS_FAMEs_01_GCMS02_20180816	40	10.7155	10.647	1000	1000	[C10] Methyl Caprate [10.647]
+GCMS_FAMEs_01_GCMS02_20180816	50	13.2801833333333	13.25	1200	1200	[C12] Methyl Laurate [13.250]
+GCMS_FAMEs_01_GCMS02_20180816	58	15.6009	15.597	1400	1400	[C14] Methyl Myristate [15.597]
+GCMS_FAMEs_01_GCMS02_20180816	67	17.7026833333333	17.723	1600	1600	[C16] Methyl Palmitate [17.723]
+GCMS_FAMEs_01_GCMS02_20180816	77	19.6168	19.663	1800	1800	[C18] Methyl Stearate [19.663]
+GCMS_FAMEs_01_GCMS02_20180816	86	21.3682833333333	21.441	2000	2000	[C20] Methyl Eicosanoate [21.441]
+GCMS_FAMEs_01_GCMS02_20180816	95	22.9884166666667	23.082	2200	2200	[C22] Methyl Docosanoate [23.082]
+GCMS_FAMEs_01_GCMS02_20180816	101	24.4896833333333	24.603	2400	2400	[C24] Methyl Linocerate [24.603]
+GCMS_FAMEs_01_GCMS02_20180816	110	27.1982333333333	27.349	2800	2800	[C28] Methyl Octacosanoate [27.349]
+Agile_RhodoTest_AminoacidCambridge_10	23	7.688	7.536	763.8969754	772.5	L-alanine [major]
+Agile_RhodoTest_AminoacidCambridge_10	62	9.5646	9.876	945.4040891	946.7	ethanolamine
+Agile_RhodoTest_AminoacidCambridge_10	71	10.10255	9.945	970.9231353	948.27	L-leucine [major]
+Agile_RhodoTest_AminoacidCambridge_10	76	10.40906667	10.225	985.4635442	969.56	L-isoleucine [major]
+Agile_RhodoTest_AminoacidCambridge_10	77	10.46536667	10.341	988.13428	975.52	L-proline [major]
+Agile_RhodoTest_AminoacidCambridge_10	82	10.60298333	10.456	994.6624816	992.5	glycine
+Agile_RhodoTest_AminoacidCambridge_10	93	11.3286	11.225	1047.810971	1040.3	L-serine [major]
+Agile_RhodoTest_AminoacidCambridge_10	95	11.69765	11.596	1076.590352	1078.6	L-threonine [major]
+Agile_RhodoTest_AminoacidCambridge_10	113	13.37408333	13.321	1208.092328	1202.7	L-aspartic acid [major]
+Agile_RhodoTest_AminoacidCambridge_10	114	13.3991	13.218	1210.248271	1196.73	L-pyroglutamic acid
+Agile_RhodoTest_AminoacidCambridge_10	134	14.54381667	14.398	1308.900268	1297.52	L-glutamic acid [major]
+Agile_RhodoTest_AminoacidCambridge_10	135	14.65641667	14.585	1318.604167	1317.5	L-phenylalanine [major]
+Agile_RhodoTest_AminoacidCambridge_10	147	16.77071667	16.632	1511.31658	1495.79	L-ornithine [major]
+Agile_RhodoTest_AminoacidCambridge_10	151	17.45253333	17.345	1576.196405	1563.17	L-tyrosine [minor]
+Agile_RhodoTest_AminoacidCambridge_10	156	17.8216	17.643	1612.425227	1595.81	L-lysine [major]
+Agile_RhodoTest_AminoacidCambridge_10	159	18.00926667	17.856	1632.033923	1612.33	L-tyrosine [major]
+Agile_RhodoTest_AminoacidCambridge_30	21	7.7005	7.536	765.7472739	772.5	L-alanine [major]
+Agile_RhodoTest_AminoacidCambridge_30	58	9.564583333	9.876	945.4032985	946.7	ethanolamine
+Agile_RhodoTest_AminoacidCambridge_30	68	10.1088	9.945	971.2196202	948.27	L-leucine [major]
+Agile_RhodoTest_AminoacidCambridge_30	74	10.4153	10.225	985.7592385	969.56	L-isoleucine [major]
+Agile_RhodoTest_AminoacidCambridge_30	75	10.4716	10.341	988.4299742	975.52	L-proline [major]
+Agile_RhodoTest_AminoacidCambridge_30	77	10.60296667	10.456	994.661691	992.5	glycine
+Agile_RhodoTest_AminoacidCambridge_30	83	11.33483333	11.225	1048.297061	1040.3	L-serine [major]
+Agile_RhodoTest_AminoacidCambridge_30	87	11.7039	11.596	1077.077742	1078.6	L-threonine [major]
+Agile_RhodoTest_AminoacidCambridge_30	112	13.37406667	13.321	1208.090891	1202.7	L-aspartic acid [major]
+Agile_RhodoTest_AminoacidCambridge_30	114	13.39908333	13.218	1210.246835	1196.73	L-pyroglutamic acid
+Agile_RhodoTest_AminoacidCambridge_30	131	14.5438	14.398	1308.898832	1297.52	L-glutamic acid [major]
+Agile_RhodoTest_AminoacidCambridge_30	133	14.6564	14.585	1318.60273	1317.5	L-phenylalanine [major]
+Agile_RhodoTest_AminoacidCambridge_30	144	16.77695	16.632	1511.909727	1495.79	L-ornithine [major]
+Agile_RhodoTest_AminoacidCambridge_30	152	17.44626667	17.345	1575.600086	1563.17	L-tyrosine [minor]
+Agile_RhodoTest_AminoacidCambridge_30	158	17.82158333	17.643	1612.423485	1595.81	L-lysine [major]
+Agile_RhodoTest_AminoacidCambridge_30	159	18.00925	17.856	1632.032182	1612.33	L-tyrosine [major]
