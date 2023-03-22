@@ -21,53 +21,77 @@ library(e1071)
 ```
 
 ```{r Load Data}
-# Load all CoreMS data 
-CoreMS_Files <- list.files("/Users/degn400/Library/Group Containers/UBF8T346G9.OneDriveStandaloneSuite/OneDrive - PNNL.noindex/OneDrive - PNNL/Desktop/MQ/MQ_Data/Final_Dataset/SUM", full.names = T)
+# List FAMES files 
+FAMES_files <- list.files("../../RI_Specific_Data/TP_RI_with_FAMES", full.names = T)
 
-# Read in annotations
-Annotations <- fread("~/Downloads/AnnoTP.txt")
+# Pull data from files 
+FAMES_TP <- do.call(rbind, lapply(FAMES_files, function(x) {
+  
+  # Read data, add column indicating FAMEs or not, and add dataset name
+  Sub <- fread(x) %>%
+    mutate(
+      FAMES = grepl("FAME", `Sample Name`),
+      Dataset = strsplit(x, "/", fixed = T) %>% unlist() %>% tail(1)
+    )
+  
+  # Split out fames 
+  FAME_Sub <- Sub %>% filter(FAMES)
+  Sub <- Sub %>% filter(!FAMES)
+  
+  # Add left and right difference
+  Res <- Sub %>%
+    mutate(
+      `Left FAMEs RT` = lapply(`Retention Time`, function(RT) {
+        ifelse(RT < min(FAME_Sub$`Retention Time`), NA, 
+               FAME_Sub$`Retention Time`[which(RT - FAME_Sub$`Retention Time` > 0) %>% max()])
+      }) %>% unlist(),
+      `Left FAMEs RI` = lapply(`Retention Index`, function(RI) {
+        ifelse(RI < min(FAME_Sub$`Retention Index`), NA, 
+               FAME_Sub$`Retention Index`[which(RI - FAME_Sub$`Retention Index` > 0) %>% max()])
+      }) %>% unlist(),
+      `Left Difference` = `Retention Time` - `Left FAMEs RT`,
+      `Right FAMEs RT` = lapply(`Retention Time`, function(RT) {
+        ifelse(RT > max(FAME_Sub$`Retention Time`), NA, 
+               FAME_Sub$`Retention Time`[which(FAME_Sub$`Retention Time` - RT > 0) %>% min()])
+      }) %>% unlist(),
+      `Right FAMEs RI` = lapply(`Retention Index`, function(RI) {
+        ifelse(RI > max(FAME_Sub$`Retention Index`), NA, 
+               FAME_Sub$`Retention Index`[which(FAME_Sub$`Retention Index` - RI > 0) %>% min()])
+      }) %>% unlist(),
+      `Right Difference` = `Right FAMEs RT` - `Retention Time`
+    )
+  
+  return(Res)
 
-# Subset to N > 30
-MetaboliteCount <- table(Annotations$`Compound Name`, dnn = c("Compound.Name")) %>%
-  data.frame() 
-Anno30 <- Annotations[Annotations$`Compound Name` %in% 
-                      MetaboliteCount[MetaboliteCount$Freq >= 30, "Compound.Name"],] %>%
-  filter(`Compound Name` != "[PNNLMET0040] Impurity 001 [12.148]")
-Compounds <- unique(Anno30$`Compound Name`)
+}))
 
-# Pull FAMEs
-FAMEs <- fread("../../RI_Specific_Data/FAMES.csv")
-
-# Pull metadata
-Metadata <- fread("../../Metadata/Sample_Metadata.csv")
-Metadata$Time <- as.Date(Metadata$Time, "%m/%d/%y")
-Metadata <- Metadata %>% arrange(Time)
-
-# Add skew information
-Skews <- Anno30 %>%
+# Pull Skews
+Skews <- FAMES_TP %>%
   dplyr::select(`Compound Name`, `Retention Index`) %>%
   group_by(`Compound Name`) %>%
   summarise(Skew = abs(skewness(`Retention Index`)))
 
+# Merge skew
+FAMES_TP <- merge(FAMES_TP, Skews, by = "Compound Name")
 
+FAMES_TP <- FAMES_TP %>% mutate(`Max Difference` = lapply(1:nrow(FAMES_TP), function(el) {
+  max(c(FAMES_TP$`Left Difference`[el], FAMES_TP$`Right Difference`[el]), na.rm = T)
+}) %>% unlist())
 ```
-
-```{r}
-# Add FAMEs file for each group
-
-
-```
-
 
 ## Are non-normal distributions far from FAMES?
 
 ```{r}
-Anno30 %>%
-  dplyr::select(`Compound Name`, `Retention Time`) %>%
-  merge(Skews, by = "Compound Name") %>%
-  ggplot(aes(x = `Retention Time`, y = Skew)) + geom_point()
+ggplot(FAMES_TP, aes(x = `Right Difference`, y = Skew)) + geom_point() + theme_bw() +
+  facet_wrap(.~`Right FAMEs RI`)
 ```
 
+```{r} 
+(ggplot(FAMES_TP, aes(x = `Left Difference`, y = Skew)) + geom_point() + theme_bw()) + 
+  (ggplot(FAMES_TP, aes(x = `Right Difference`, y = Skew)) + geom_point() + theme_bw())
+
+ggplot(FAMES_TP, aes(x = `Max Difference`, y = Skew)) + geom_point() + theme_bw()
+```
 
 ## How are retention indices selected? 
 
