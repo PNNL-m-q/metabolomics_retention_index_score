@@ -292,7 +292,18 @@ Combined_Plot
 
 ```
 
+```{r}
+Anno30 %>%
+  group_by(`Compound Name`) %>%
+  summarise(
+    SD = sd(`Retention Index`),
+    Ref = `Retention Index Ref` %>% unique()
+  ) %>%
+  ggplot(aes(x = Ref, y = SD)) + geom_point() + theme_bw() + xlab("Reference Retention Index") +
+  ylab("Query Retention Index Standard Deviation")
 
+
+```
 
 
 
