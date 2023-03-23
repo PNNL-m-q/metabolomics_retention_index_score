@@ -21,6 +21,20 @@ library(e1071)
 ```
 
 ```{r Load Data}
+# Anno30 
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+
+# Count the metabolite data 
+MetaboliteCount <- table(Annotations$`Compound Name`, dnn = c("Compound.Name")) %>%
+  data.frame() %>%
+  mutate("Label" = ifelse(Freq >= 30, ">=30", "<30"))
+
+# Number of metabolites greater than or equal to 30 samples
+MetaboNum <- nrow(MetaboliteCount[MetaboliteCount$Freq >= 30,])
+
+# Subset annotation data to only the top 30 metabolites
+Anno30 <- Annotations[Annotations$`Compound Name` %in% 
+                      MetaboliteCount[MetaboliteCount$Freq >= 30, "Compound.Name"],]
 # List FAMES files 
 FAMES_files <- list.files("../../RI_Specific_Data/TP_RI_with_FAMES", full.names = T)
 
@@ -197,8 +211,86 @@ Left_Plot + Right_Plot + plot_annotation(tag_levels = 'A')
 
 ```{r}
 Metabolite_Drift_Plot + FAMES_Drift_Plot + plot_annotation(tag_levels = 'A')
-````
+```
 
+## Example Workflow
+
+```{r}
+Annotations <- fread("~/Downloads/AnnoTP.txt")
+
+# Experimental Plot 
+SampleCounts <- table(Annotations$`Sample Name`, dnn = "Sample") %>% data.frame()
+
+Spectra_Exp <- Annotations %>%
+  filter(`Sample Name` == "A_nidulans_glucuronicAcid_PO_03_M") %>%
+  dplyr::select(`Retention Time`, `Peak Area`)
+
+Spectra_Exp <- pspecterlib::make_peak_data(
+  MZ = c(Spectra_Exp$`Retention Time`, 29),
+  Intensity = c(Spectra_Exp$`Peak Area`, 1e6)
+) 
+
+Spectra_Exp_Plot <- (Spectra_Exp %>%
+  pspecterlib::annotated_spectrum_plot()) + xlab("Retention Time") + 
+  theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
+  ggtitle("Sample Chromatogram") + theme(plot.title = element_text(hjust = 0.5)) + xlim(c(5, 30))
+
+Scale <- max(Spectra_Exp$Intensity)
+
+# FAMES Plot 
+FAMES_Exp <- pspecterlib::make_peak_data(
+  MZ = c(7.88220, 9.255235, 10.62827, 13.22422, 15.58247, 17.72805, 19.67970, 21.48123,
+         23.42395, 25.36667, 27.30939, 29.25211, rnorm(25, 18, 5)),
+  Intensity = c(Scale * 0.2, Scale * 0.4, Scale * 0.6, Scale * 0.75, Scale, Scale * 0.77, 
+                Scale * 0.8, Scale * 0.6, Scale * 0.77, Scale * 0.85, Scale * 0.98, Scale * 0.99,
+                abs(rnorm(25, Scale * 0.1, 1e7)))
+) 
+
+class(FAMES_Exp) <- c("data.table", "data.frame")
+FAMES_Exp$Group <- "Noise"
+FAMES_Exp[FAMES_Exp$`M/Z` %in% c(7.88220, 9.255235, 10.62827, 13.22422, 15.58247, 17.72805, 19.67970, 21.48123,
+         23.42395, 25.36667, 27.30939, 29.25211), "Group"] <- "FAMES"
+Peaks <- FAMES_Exp
+Peaks0 <- data.table::data.table(`M/Z` = c(Peaks$`M/Z` - 
+    1e-12, Peaks$`M/Z` + 1e-12), Intensity = 0, Abundance = 0, Group = rep(FAMES_Exp$Group, 3))
+Peaks <- rbind(Peaks0, Peaks)
+Peaks <- Peaks[order(Peaks$`M/Z`), ]
+
+FAMES_Exp_Plot <- ggplot(Peaks, aes(x = `M/Z`, y = Intensity, color = Group)) + geom_line(size = 1) +
+  theme_bw() + scale_color_manual(values = c("red", "black")) +   
+  theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
+  ggtitle("FAMEs Chromatogram") + theme(plot.title = element_text(hjust = 0.5), legend.position = "none") +
+  xlab("Retention Time") + xlim(c(5, 30))
+
+Spectra_Exp_Plot + FAMES_Exp_Plot
+```
+
+```{r}
+Combined <- pspecterlib::make_peak_data(
+  MZ = c(7.88220, 9.255235, 10.62827, 13.22422, 15.58247, 17.72805, 19.67970, 21.48123,
+         23.42395, 25.36667, 27.30939, 29.25211, Spectra_Exp$`M/Z`, 29),
+  Intensity = c(rep(3e8, 12),
+                Spectra_Exp$Intensity, 1e6)
+) 
+class(Combined) <- c("data.table", "data.frame")
+Combined$Group <- "Noise"
+Combined[Combined$`M/Z` %in% c(7.88220, 9.255235, 10.62827, 13.22422, 15.58247, 17.72805, 19.67970, 21.48123,
+         23.42395, 25.36667, 27.30939, 29.25211), "Group"] <- "FAMES"
+Peaks <- Combined
+Peaks0 <- data.table::data.table(`M/Z` = c(Peaks$`M/Z` - 
+    1e-12, Peaks$`M/Z` + 1e-12), Intensity = 0, Abundance = 0, Group = rep(Combined$Group, 3))
+Peaks <- rbind(Peaks0, Peaks)
+Peaks <- Peaks[order(Peaks$`M/Z`), ]
+
+Combined_Plot <- ggplot(Peaks, aes(x = `M/Z`, y = Intensity, color = Group)) + geom_line(size = 1) +
+  theme_bw() + scale_color_manual(values = c("red", "black")) +   
+  theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none") +
+  xlab("Retention Time") + xlim(c(5, 30))
+
+Combined_Plot
+
+```
 
 
 
