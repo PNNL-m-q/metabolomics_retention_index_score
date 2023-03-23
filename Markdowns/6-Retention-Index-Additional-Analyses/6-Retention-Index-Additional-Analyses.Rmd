@@ -47,7 +47,7 @@ FAMES_TP <- do.call(rbind, lapply(FAMES_files, function(x) {
       }) %>% unlist(),
       `Left FAMEs RI` = lapply(`Retention Index`, function(RI) {
         ifelse(RI < min(FAME_Sub$`Retention Index`), NA, 
-               FAME_Sub$`Retention Index`[which(RI - FAME_Sub$`Retention Index` > 0) %>% max()])
+               paste0("FAMES RI: ", FAME_Sub$`Retention Index`[which(RI - FAME_Sub$`Retention Index` > 0) %>% max()]))
       }) %>% unlist(),
       `Left Difference` = `Retention Time` - `Left FAMEs RT`,
       `Right FAMEs RT` = lapply(`Retention Time`, function(RT) {
@@ -56,7 +56,7 @@ FAMES_TP <- do.call(rbind, lapply(FAMES_files, function(x) {
       }) %>% unlist(),
       `Right FAMEs RI` = lapply(`Retention Index`, function(RI) {
         ifelse(RI > max(FAME_Sub$`Retention Index`), NA, 
-               FAME_Sub$`Retention Index`[which(FAME_Sub$`Retention Index` - RI > 0) %>% min()])
+               paste0("FAMES RI: ", FAME_Sub$`Retention Index`[which(FAME_Sub$`Retention Index` - RI > 0) %>% min()]))
       }) %>% unlist(),
       `Right Difference` = `Right FAMEs RT` - `Retention Time`
     )
@@ -66,13 +66,13 @@ FAMES_TP <- do.call(rbind, lapply(FAMES_files, function(x) {
 }))
 
 # Pull Skews
-Skews <- FAMES_TP %>%
+Skew <- FAMES_TP %>%
   dplyr::select(`Compound Name`, `Retention Index`) %>%
   group_by(`Compound Name`) %>%
-  summarise(Skew = abs(skewness(`Retention Index`)))
+  summarise(`Absolute Skew` = abs(skewness(`Retention Index`)))
 
 # Merge skew
-FAMES_TP <- merge(FAMES_TP, Skews, by = "Compound Name")
+FAMES_TP <- merge(FAMES_TP, Skew, by = "Compound Name")
 
 FAMES_TP <- FAMES_TP %>% mutate(`Max Difference` = lapply(1:nrow(FAMES_TP), function(el) {
   max(c(FAMES_TP$`Left Difference`[el], FAMES_TP$`Right Difference`[el]), na.rm = T)
@@ -81,36 +81,123 @@ FAMES_TP <- FAMES_TP %>% mutate(`Max Difference` = lapply(1:nrow(FAMES_TP), func
 
 ## Are non-normal distributions far from FAMES?
 
-```{r}
-ggplot(FAMES_TP, aes(x = `Right Difference`, y = Skew)) + geom_point() + theme_bw() +
-  facet_wrap(.~`Right FAMEs RI`)
-```
-
-```{r} 
-(ggplot(FAMES_TP, aes(x = `Left Difference`, y = Skew)) + geom_point() + theme_bw()) + 
-  (ggplot(FAMES_TP, aes(x = `Right Difference`, y = Skew)) + geom_point() + theme_bw())
-
-ggplot(FAMES_TP, aes(x = `Max Difference`, y = Skew)) + geom_point() + theme_bw()
-```
-
-## How are retention indices selected? 
+In short, there does not appear to be a relationship between distance from FAMEs
+and normality. 
 
 ```{r}
-Example <- fread("~/Downloads/Group 2_Standards.csv")
+# Clean up FAMES TP 
+Left_FAMES <- FAMES_TP %>% 
+  filter(!is.na(`Left FAMEs RI`)) %>%
+  rename(`Retention Time Difference` = `Left Difference`) %>%
+  mutate(
+    `Left FAMEs RI` = factor(`Left FAMEs RI`, 
+                             levels = paste0("FAMES RI: ", c("800", "900", "1000", "1200", 
+                                                             "1400", "1600", "1800", "2000", 
+                                                             "2200", "2400")))
+  )
 
-Example %>%
-  filter(`Sample name` == "GCMS_FAMEs_01_GCMS02_20200303" & grepl("C8|C9|C10|C12|C14|C16|C18|C20|C22|C24|C26|C28", `Compound Name`)) %>%
-  dplyr::select(`Compound Name`, `Retention Time`, `Retention index`, `Retention index Ref`)
+Left_Plot <- ggplot(Left_FAMES, aes(x = `Retention Time Difference`, y = `Absolute Skew`)) + geom_point() + theme_bw() +
+  facet_wrap(.~`Left FAMEs RI`) + ggtitle("Left Distance from FAMEs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+Left_Plot
 ```
 
+```{r}
+Right_FAMES <- FAMES_TP %>% 
+  filter(!is.na(`Right FAMEs RI`)) %>%
+  rename(`Retention Time Difference` = `Right Difference`) %>%
+  mutate(
+    `Right FAMEs RI` = factor(`Right FAMEs RI`, 
+                             levels = paste0("FAMES RI: ", c("800", "900", "1000", "1200", 
+                                                             "1400", "1600", "1800", "2000", 
+                                                             "2200", "2400", "2600")))
+  )
+
+Right_Plot <- ggplot(Right_FAMES, aes(x = `Retention Time Difference`, y = `Absolute Skew`)) + geom_point() + theme_bw() +
+  facet_wrap(.~`Right FAMEs RI`) + ggtitle("Right Distance from FAMEs") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+Right_Plot
+```
+
+## Do we see retention time drift since FAMEs injection time? 
+
+```{r}
+FAMES_files <- list.files("../../RI_Specific_Data/TP_RI_with_FAMES", full.names = T)
+Metadata <- fread("../../Metadata/Sample_Metadata.csv")
+Metadata$Time <- as.Date(Metadata$Time, "%m/%d/%y")
+
+FAMES_Drift <- do.call(rbind, lapply(FAMES_files, function(x) {
+  
+  # Read data, add column indicating FAMEs or not, and add dataset name
+  Sub <- fread(x) %>%
+    mutate(
+      FAMES = grepl("FAME", `Sample Name`),
+      Dataset = strsplit(x, "/", fixed = T) %>% unlist() %>% tail(1)
+    ) %>%
+    merge(Metadata, by = "Sample Name")
+  
+  # Split out fames 
+  FAME_Sub <- Sub %>% filter(FAMES)
+  Sub <- Sub %>% filter(!FAMES)
+  
+  # Get time elapsed
+  Sub$`Time Elapsed` <- abs(Sub$Time - FAME_Sub$Time[1])
+  
+  return(Sub)
+  
+}))
+  
+Metabolite_Drift_Plot <- ggplot(FAMES_Drift, aes(x = `Time Elapsed`, y = `Retention Time`, group = `Compound Name`)) + geom_line() +
+  geom_point() + theme_bw() + theme(legend.position = "none") + xlab("Days since FAMEs injection") 
+
+Metabolite_Drift_Plot
+```
+
+We do not. 
+
+```{r}
+# Load FAMES data 
+FAMES <- fread("../../RI_Specific_Data/FAMES.csv")
+
+# Extract times 
+FAMES$Date <- FAMES$`Sample name` %>%
+  strsplit("_") %>%
+  lapply(function(x) tail(x, 1)) %>%
+  unlist() %>%
+  as.Date("%Y%m%d")
+
+# Simplify name
+FAMES$FAME <- FAMES$`Compound Name` %>%
+  strsplit("]", fixed = T) %>%
+  lapply(function(x) {x <- head(x, 1)
+                      gsub("[", "", x, fixed = T)}) %>%
+  unlist()
+FAMES$FAME <- factor(FAMES$FAME, levels = c("C28", "C26", "C24", "C22", "C20", "C18",
+                                            "C16", "C14", "C12", "C10", "C9", "C8"))
+
+FAMES_Drift_Plot <- FAMES %>%
+  ggplot(aes(x = Date, y = `Retention Time`, color = FAME)) + 
+  geom_point() + theme_bw()
 
 
+FAMES_Drift_Plot 
+```
 
+# Supplemental Figures 
 
+## FAMES Standards Supplemental Figure
 
+```{r}
+Left_Plot + Right_Plot + plot_annotation(tag_levels = 'A')
+```
 
+## Identifying Any Drift
 
-
+```{r}
+Metabolite_Drift_Plot + FAMES_Drift_Plot + plot_annotation(tag_levels = 'A')
+````
 
 
 
