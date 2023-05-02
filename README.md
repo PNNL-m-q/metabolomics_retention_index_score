@@ -1,6 +1,6 @@
 # Refining the assumptions of the MetaboliteDetector retention index score
 
-The code in this repository supports >insert publication<. Here, you'll find 3 main folders: 
+The code in this repository supports [this publication](https://pubs.acs.org/doi/10.1021/acs.analchem.2c05783). Here, you'll find 3 main folders: 
 
 **Markdowns:** Contains all the plots and analysis summaries from the publication. It is split into 4 markdowns, one for each figure in the publication. Supplemental figures can be found throughout the markdowns. 
 
