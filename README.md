@@ -2,7 +2,7 @@
 
 The code in this repository supports [this publication](https://pubs.acs.org/doi/10.1021/acs.analchem.2c05783). Here, you'll find 3 main folders: 
 
-**Markdowns:** Contains all the plots and analysis summaries from the publication. It is split into 4 markdowns, one for each figure in the publication. Supplemental figures can be found throughout the markdowns. 
+**Markdowns:** Contains all the plots and analysis summaries from the publication. It is split into 6 markdowns, one for each figure in the publication, and another for supplemental analyses. Supplemental figures can be found throughout the markdowns. 
 
 **RI Specific Data:** Houses the results of the 10% holdout analyses for both the full and subset datasets. Other files, such as retention time information for FAMES files, are kept here as well. 
 
