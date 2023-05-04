@@ -16,7 +16,7 @@ knitr::opts_knit$set(rootdir = path)
 #setwd(path)
 library(plotly); library(ggplot2); library(ggpubr); library(knitr); library(DT); 
 library(trelliscopejs); library(gapminder); library(dplyr); 
-library(tidyr); library(purrr); library(e1071); library(Hmisc); library(ggpubr);
+library(tidyr); library(purrr); library(e1071); library(Hmisc); #library(ggpubr);
 library(data.table); library(grDevices); library(patchwork); library(lubridate);
 library(patchwork); library(cowplot)
 ```
@@ -487,3 +487,16 @@ MEAN_PLOT + ylab("Frequency") + larger() |
   SKEW_PLOT + larger()
 ```
 
+
+## Other 
+
+```{r}
+Skews <- Anno30 %>%
+  group_by(`Compound Name`, `Sample Type`) %>%
+  summarise(
+    Skew = e1071::skewness(`Retention Index`) %>% round(4),
+    Count = n()
+  ) 
+
+Skews
+``` 
