@@ -1,3 +1,6 @@
+This repository has been archived and is no longer maintained.
+The code is provided for historical reference and may contain unpatched or unknown vulnerabilities. It should not be used in production systems.
+
 # Refining the assumptions of the MetaboliteDetector retention index score
 
 The code in this repository supports [this publication](https://pubs.acs.org/doi/10.1021/acs.analchem.2c05783). Here, you'll find 3 main folders: 
